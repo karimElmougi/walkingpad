@@ -11,3 +11,4 @@ tokio = { version = "*", features = ["macros", "rt-multi-thread"]}
 
 [dependencies]
 uuid = "^0.8"
+bitflags = "^1.3"

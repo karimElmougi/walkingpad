@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 
 use uuid::Uuid;
+use bitflags::bitflags;
 
 // Stole this from the btleplug crate
 const BLUETOOTH_BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;
@@ -61,14 +62,15 @@ pub enum Unit {
     Imperial = 1,
 }
 
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
-pub enum Info {
-    Time = 0b1,
-    Speed = 0b10,
-    Distance = 0b100,
-    Calorie = 0b1000,
-    Step = 0b10000,
+bitflags! {
+    pub struct Info: u8 {
+        const NONE = 0b0;
+        const TIME = 0b1;
+        const SPEED = 0b10;
+        const DISTANCE = 0b100;
+        const CALORIE = 0b1000;
+        const STEP = 0b10000;
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
@@ -149,7 +151,7 @@ impl Command {
             SetMaxSpeed(speed) => to_bytes(speed.hm_per_hour() as u32),
             SetSensitivity(sensitivity) => to_bytes(*sensitivity as u32),
             SetAutoStart(enabled) => to_bytes(*enabled as u32),
-            SetDisplayInfo(info) => to_bytes(*info as u32),
+            SetDisplayInfo(info) => to_bytes(info.bits() as u32),
             SetUnit(unit) => to_bytes(*unit as u32),
             SetLock(enabled) => to_bytes(*enabled as u32),
         };
