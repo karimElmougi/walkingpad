@@ -9,6 +9,9 @@ const BLUETOOTH_BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;
 pub const TREADMILL_CHARACTERISTIC_UUID: Uuid =
     Uuid::from_u128(BLUETOOTH_BASE_UUID | ((0xfe02) << 96));
 
+pub const TREADMILL_READ_CHARACTERISTIC_UUID: Uuid =
+    Uuid::from_u128(BLUETOOTH_BASE_UUID | ((0xfe01) << 96));
+
 pub const WALKINGPAD_SERVICE_UUID: Uuid =
     Uuid::from_u128(0xfe00 << 96 | 0x1000 << 64 | 0x8000 << 48 | 0x805f9b34fb);
 
@@ -76,6 +79,7 @@ bitflags! {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Command {
+    // Asks for run statistics maybe? And its SetSettings counterpart asks for current settings?
     Query,
     SetSpeed(Speed),
     SetMode(Mode),
@@ -123,7 +127,7 @@ impl Command {
             SetSettings = 6,
 
             #[allow(dead_code)]
-            Unknown = 7, // No idea what this one means
+            Unknown = 7, // No idea what this one means, maybe sync?
         }
 
         impl Mode {
@@ -154,7 +158,7 @@ impl Command {
         use Command::*;
 
         let mut param = match self {
-            Query => unimplemented!(),
+            Query => vec![0],
             SetSpeed(speed) => vec![speed.hm_per_hour()],
             SetMode(mode) => vec![*mode as u8],
             Start => vec![1],

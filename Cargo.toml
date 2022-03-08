@@ -7,6 +7,7 @@ edition = "2021"
 
 [dev-dependencies]
 btleplug = "0.9"
+futures = "*"
 tokio = { version = "*", features = ["macros", "rt-multi-thread"]}
 
 [dependencies]
