@@ -3,9 +3,9 @@ use crabwalkpad::*;
 use std::error::Error;
 use std::time::Duration;
 
-use btleplug::api::Manager as _;
 use btleplug::api::Peripheral as _;
 use btleplug::api::{Central, ScanFilter, WriteType};
+use btleplug::api::{Characteristic, Manager as _};
 use btleplug::platform::{Adapter, Manager, Peripheral};
 
 #[tokio::main]
@@ -29,15 +29,43 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .find(|c| c.uuid == TREADMILL_CHARACTERISTIC_UUID)
         .unwrap();
 
-    println!("Starting walkingpad");
-
-    walkingpad.write(&control_characteristic, &Command::Start.as_bytes(), WriteType::WithoutResponse).await.unwrap();
+    println!("Waking up");
+    send(
+        Command::SetMode(Mode::Manual),
+        &walkingpad,
+        control_characteristic,
+    )
+    .await;
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-    walkingpad.write(&control_characteristic, &Command::Stop.as_bytes(), WriteType::WithoutResponse).await.unwrap();
+    println!("Starting");
+    send(Command::Start, &walkingpad, control_characteristic).await;
+    tokio::time::sleep(Duration::from_secs(10)).await;
+
+    println!("Stopping");
+    send(Command::Stop, &walkingpad, control_characteristic).await;
     tokio::time::sleep(Duration::from_secs(5)).await;
+
+    println!("Setting to sleep");
+    send(
+        Command::SetMode(Mode::Sleep),
+        &walkingpad,
+        control_characteristic,
+    )
+    .await;
 
     Ok(())
+}
+
+async fn send(command: Command, walkingpad: &Peripheral, control_characteristic: &Characteristic) {
+    walkingpad
+        .write(
+            control_characteristic,
+            &command.as_bytes(),
+            WriteType::WithoutResponse,
+        )
+        .await
+        .unwrap()
 }
 
 async fn discover_walkingpad(central: &Adapter) -> Peripheral {
@@ -65,4 +93,3 @@ async fn discover_walkingpad(central: &Adapter) -> Peripheral {
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
 }
-

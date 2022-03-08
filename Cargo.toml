@@ -5,7 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
+[dev-dependencies]
 btleplug = "0.9"
 tokio = { version = "*", features = ["macros", "rt-multi-thread"]}
-uuid = "*"
+
+[dependencies]
+uuid = "^0.8"
