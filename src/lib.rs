@@ -5,8 +5,11 @@ use uuid::Uuid;
 // Stole this from the btleplug crate
 const BLUETOOTH_BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;
 
-pub const TREADMILL_CHARACTERISTIC_UUID: Uuid = Uuid::from_u128(BLUETOOTH_BASE_UUID | ((0xfe02) << 96));
-pub const WALKINGPAD_SERVICE_UUID: Uuid = Uuid::from_u128(0xfe00 << 96 | 0x1000 << 64 | 0x8000 << 48 | 0x805f9b34fb);
+pub const TREADMILL_CHARACTERISTIC_UUID: Uuid =
+    Uuid::from_u128(BLUETOOTH_BASE_UUID | ((0xfe02) << 96));
+
+pub const WALKINGPAD_SERVICE_UUID: Uuid =
+    Uuid::from_u128(0xfe00 << 96 | 0x1000 << 64 | 0x8000 << 48 | 0x805f9b34fb);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Speed(u8);
@@ -169,4 +172,3 @@ impl Command {
 fn to_bytes(val: u32) -> Vec<u8> {
     val.to_be_bytes().to_vec()
 }
-
