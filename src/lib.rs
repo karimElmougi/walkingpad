@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 
-use uuid::Uuid;
 use bitflags::bitflags;
+use uuid::Uuid;
 
 // Stole this from the btleplug crate
 const BLUETOOTH_BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;
@@ -16,6 +16,7 @@ pub const WALKINGPAD_SERVICE_UUID: Uuid =
 pub struct Speed(u8);
 
 impl Speed {
+    // An hectometer is 100 meters, or 0.1 kilometers
     fn hm_per_hour(&self) -> u8 {
         self.0
     }
@@ -80,7 +81,7 @@ pub enum Command {
     SetMode(Mode),
     SetCalibrationMode(bool),
     SetMaxSpeed(Speed),
-    Start, // This actually acts as a toggle
+    Start, // This actually acts as a toggle it seems
     Stop,
     SetStartSpeed(Speed),
     SetAutoStart(bool),
@@ -98,11 +99,11 @@ impl Command {
             Query => 0,
             SetSpeed(_) => 1,
             SetMode(_) => 2,
-            SetCalibrationMode(_) => 2, // Not a typo, they really share the same code
+            SetCalibrationMode(_) => 2,
             SetMaxSpeed(_) => 3,
             Start => 4,
             Stop => 4,
-            SetStartSpeed(_) => 4, // Not a typo, they really share the same code
+            SetStartSpeed(_) => 4,
             SetAutoStart(_) => 5,
             SetSensitivity(_) => 6,
             SetDisplayInfo(_) => 7,
@@ -111,29 +112,42 @@ impl Command {
         }
     }
 
-    fn type_byte(&self) -> u8 {
+    fn mode(&self) -> u8 {
         use Command::*;
 
         // This is my best guess as to what that particular byte in the command header represents,
         // but I truly have no idea
-        const COMMAND_TYPE: u8 = 0xa2;
-        const SETTINGS_TYPE: u8 = 0xa6;
+        #[repr(u8)]
+        enum Mode {
+            Command = 2,
+            SetSettings = 6,
+
+            #[allow(dead_code)]
+            Unknown = 7, // No idea what this one means
+        }
+
+        impl Mode {
+            fn code(self) -> u8 {
+                0xa0 + self as u8
+            }
+        }
 
         match self {
-            Query => COMMAND_TYPE,
-            SetSpeed(_) => COMMAND_TYPE,
-            SetMode(_) => COMMAND_TYPE,
-            SetCalibrationMode(_) => SETTINGS_TYPE,
-            SetMaxSpeed(_) => SETTINGS_TYPE,
-            Start => COMMAND_TYPE,
-            Stop => COMMAND_TYPE,
-            SetStartSpeed(_) => SETTINGS_TYPE,
-            SetAutoStart(_) => SETTINGS_TYPE,
-            SetSensitivity(_) => SETTINGS_TYPE,
-            SetDisplayInfo(_) => SETTINGS_TYPE,
-            SetUnit(_) => SETTINGS_TYPE,
-            SetLock(_) => SETTINGS_TYPE,
+            Query => Mode::Command,
+            SetSpeed(_) => Mode::Command,
+            SetMode(_) => Mode::Command,
+            SetCalibrationMode(_) => Mode::SetSettings,
+            SetMaxSpeed(_) => Mode::SetSettings,
+            Start => Mode::Command,
+            Stop => Mode::Command,
+            SetStartSpeed(_) => Mode::SetSettings,
+            SetAutoStart(_) => Mode::SetSettings,
+            SetSensitivity(_) => Mode::SetSettings,
+            SetDisplayInfo(_) => Mode::SetSettings,
+            SetUnit(_) => Mode::SetSettings,
+            SetLock(_) => Mode::SetSettings,
         }
+        .code()
     }
 
     pub fn as_bytes(&self) -> Vec<u8> {
@@ -157,7 +171,7 @@ impl Command {
         };
 
         // 0xf7 is ostensibly some sort of header value
-        let mut bytes = vec![0xf7, self.type_byte(), self.code()];
+        let mut bytes = vec![0xf7, self.mode(), self.code()];
 
         bytes.append(&mut param);
 
