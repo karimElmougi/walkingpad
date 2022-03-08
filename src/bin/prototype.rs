@@ -1,4 +1,4 @@
-use walkingpad_rs::*;
+use crabwalkpad::*;
 
 use std::error::Error;
 use std::time::Duration;
