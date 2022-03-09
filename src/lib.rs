@@ -2,6 +2,13 @@ use std::convert::TryFrom;
 
 use bitflags::bitflags;
 use uuid::Uuid;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ProtocolError {
+    #[error("{0} hm/h is greater than the maximum supported speed of 60 hm/h")]
+    InvalidSpeed(u8)
+}
 
 // Stole this from the btleplug crate
 const BLUETOOTH_BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;
@@ -32,13 +39,13 @@ impl Default for Speed {
 }
 
 impl TryFrom<u8> for Speed {
-    type Error = String;
+    type Error = ProtocolError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value <= 60 {
             Ok(Speed(value))
         } else {
-            Err("".to_string())
+            Err(ProtocolError::InvalidSpeed(value))
         }
     }
 }
