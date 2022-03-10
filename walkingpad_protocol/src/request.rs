@@ -14,7 +14,7 @@ pub enum Command {
     SetAutoStart(bool),
     SetSensitivity(Sensitivity),
     SetDisplayInfo(InfoFlags),
-    SetUnit(Unit),
+    SetUnit(Units),
     SetLock(bool),
 }
 
