@@ -1,14 +1,35 @@
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
+use std::mem::size_of;
 
 use bitflags::bitflags;
-use uuid::Uuid;
 use thiserror::Error;
+use uuid::Uuid;
+
+type Result<T> = std::result::Result<T, ProtocolError>;
 
 #[derive(Error, Debug)]
 pub enum ProtocolError {
     #[error("{0} hm/h is greater than the maximum supported speed of 60 hm/h")]
-    InvalidSpeed(u8)
+    InvalidSpeed(u8),
+
+    #[error("{0} isn't a valid response type")]
+    InvalidResponseType(u8),
+
+    #[error("{0} isn't a valid response header")]
+    InvalidResponseHeader(u8),
+
+    #[error("{0} isn't a valid response footer")]
+    InvalidResponseFooter(u8),
+
+    #[error("the response continues past footer")]
+    BytesAfterFooter,
+
+    #[error("the response length doesn't match any known response type or is missing bytes")]
+    ResponseTooShort,
 }
+
+const MESSAGE_HEADER: u8 = 0xf7;
+const MESSAGE_FOOTER: u8 = 0xfd;
 
 // Stole this from the btleplug crate
 const BLUETOOTH_BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;
@@ -41,7 +62,7 @@ impl Default for Speed {
 impl TryFrom<u8> for Speed {
     type Error = ProtocolError;
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u8) -> Result<Self> {
         if value <= 60 {
             Ok(Speed(value))
         } else {
@@ -74,7 +95,7 @@ pub enum Unit {
 }
 
 bitflags! {
-    pub struct Info: u8 {
+    pub struct InfoFlags: u8 {
         const NONE = 0b0;
         const TIME = 0b1;
         const SPEED = 0b10;
@@ -97,7 +118,7 @@ pub enum Command {
     SetStartSpeed(Speed),
     SetAutoStart(bool),
     SetSensitivity(Sensitivity),
-    SetDisplayInfo(Info),
+    SetDisplayInfo(InfoFlags),
     SetUnit(Unit),
     SetLock(bool),
 }
@@ -130,20 +151,14 @@ impl Command {
         // but I truly have no idea
         #[repr(u8)]
         enum Mode {
-            Command = 2,
-            SetSettings = 6,
+            Command = 0xa2,
+            SetSettings = 0xa6,
 
             #[allow(dead_code)]
-            Unknown = 7, // No idea what this one means, maybe sync?
+            Unknown = 0xa7, // No idea what this one means, maybe sync?
         }
 
-        impl Mode {
-            fn code(self) -> u8 {
-                0xa0 + self as u8
-            }
-        }
-
-        match self {
+        let mode = match self {
             Query => Mode::Command,
             SetSpeed(_) => Mode::Command,
             SetMode(_) => Mode::Command,
@@ -157,8 +172,9 @@ impl Command {
             SetDisplayInfo(_) => Mode::SetSettings,
             SetUnit(_) => Mode::SetSettings,
             SetLock(_) => Mode::SetSettings,
-        }
-        .code()
+        };
+
+        mode as u8
     }
 
     pub fn as_bytes(&self) -> Vec<u8> {
@@ -181,21 +197,161 @@ impl Command {
             SetLock(enabled) => to_bytes(*enabled as u32),
         };
 
-        // 0xf7 is ostensibly some sort of header value
-        let mut bytes = vec![0xf7, self.mode(), self.code()];
+        let mut bytes = vec![MESSAGE_HEADER, self.mode(), self.code()];
 
         bytes.append(&mut param);
 
-        // A simplistic CRC
-        bytes.push(bytes.iter().skip(1).sum());
+        bytes.push(compute_crc(&bytes[1..]));
 
-        // Ostensibly a footer
-        bytes.push(0xfd);
+        bytes.push(MESSAGE_FOOTER);
 
         bytes
     }
 }
 
+macro_rules! parse {
+    ($int_type:ty, $bytes:ident) => {
+        $bytes
+            .try_into()
+            .map(<$int_type>::from_be_bytes)
+            .map_err(|_| ProtocolError::ResponseTooShort)
+            .map(|val| (val, &$bytes[size_of::<$int_type>()..]))
+    };
+    ($int_type:ty, $to_type:ty, $bytes:ident) => {
+        $bytes
+            .try_into()
+            .map(<$int_type>::from_be_bytes)
+            .map_err(|_| ProtocolError::ResponseTooShort)
+            .and_then(|val| <$to_type>::try_from(val))
+            .map(|val| (val, &$bytes[size_of::<$int_type>()..]))
+    };
+}
+
+/// Computes the simplistic CRC checksum scheme of the message's contents.
+/// The bytes must exclude any header or footer values.
+fn compute_crc(message: &[u8]) -> u8 {
+    message
+        .iter()
+        .copied()
+        .fold(0, |crc, byte| crc.wrapping_add(byte))
+}
+
 fn to_bytes(val: u32) -> Vec<u8> {
     val.to_be_bytes().to_vec()
 }
+
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+enum ResponseType {
+    CurrentRun = 0xa2,
+    Settings = 0xa6,
+    PreviousRun = 0xa7,
+}
+
+impl TryFrom<u8> for ResponseType {
+    type Error = ProtocolError;
+
+    fn try_from(value: u8) -> Result<Self> {
+        use ResponseType::*;
+
+        const VARIANTS: [ResponseType; 3] = [CurrentRun, Settings, PreviousRun];
+        VARIANTS
+            .iter()
+            .copied()
+            .find(|&variant| variant as u8 == value)
+            .ok_or(ProtocolError::InvalidResponseType(value))
+    }
+}
+
+pub enum Response {
+    CurrentRunStats {
+        state: u8,
+        speed: Speed,
+        mode: u8,
+        time: u32,
+        distance: u32,
+        steps: u32,
+    },
+    Settings {
+        goal_type: u8,
+        goal: u8,
+        calibration: u8,
+        max_speed: Speed,
+        start_speed: Speed,
+        start_mode: Mode,
+        sensitivity: Sensitivity,
+        display: InfoFlags,
+        lock: bool,
+        unit: Unit,
+    },
+    PreviousRuns,
+}
+
+impl Response {
+    pub fn parse(bytes: &[u8]) -> Result<Response> {
+        let bytes = Response::parse_header(bytes)?;
+        let (response_type, bytes) = Response::parse_response_type(bytes)?;
+
+        let response = Response::PreviousRuns;
+        // match response_type {
+        //     ResponseType::CurrentRun => Response::parse_current_run(bytes)?,
+        //     ResponseType::Settings => (),
+        //     ResponseType::PreviousRun => (),
+        // }
+
+        Response::parse_footer(bytes)?;
+
+        Ok(response)
+    }
+
+    fn parse_current_run(bytes: &[u8]) -> Result<(Response, &[u8])> {
+        let (state, bytes) = parse!(u8, bytes)?;
+        let (speed, bytes) = parse!(u8, Speed, bytes)?;
+        let (mode, bytes) = parse!(u8, bytes)?;
+        let (time, bytes) = parse!(u32, bytes)?;
+        let (distance, bytes) = parse!(u32, bytes)?;
+        let (steps, bytes) = parse!(u32, bytes)?;
+
+        let current_run_stats = Response::CurrentRunStats {
+            state,
+            speed,
+            mode,
+            time,
+            distance,
+            steps,
+        };
+
+        Ok((current_run_stats, bytes))
+    }
+
+    fn parse_header(bytes: &[u8]) -> Result<&[u8]> {
+        let (header, bytes) = parse!(u8, bytes)?;
+
+        if header == MESSAGE_HEADER {
+            Ok(bytes)
+        } else {
+            Err(ProtocolError::InvalidResponseHeader(header))
+        }
+    }
+
+    fn parse_response_type(bytes: &[u8]) -> Result<(ResponseType, &[u8])> {
+        let (val, bytes) = parse!(u8, bytes)?;
+
+        Ok((val.try_into()?, bytes))
+    }
+
+    fn parse_footer(bytes: &[u8]) -> Result<()> {
+        let (footer, bytes) = parse!(u8, bytes)?;
+
+        if footer == MESSAGE_FOOTER {
+            if !bytes.is_empty() {
+                Err(ProtocolError::BytesAfterFooter)
+            } else {
+                Ok(())
+            }
+        } else {
+            Err(ProtocolError::InvalidResponseFooter(footer))
+        }
+    }
+}
+

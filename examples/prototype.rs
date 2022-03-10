@@ -3,9 +3,9 @@ use crabwalkpad::*;
 use std::error::Error;
 use std::time::Duration;
 
+use btleplug::api::Peripheral as _;
 use btleplug::api::{Central, ScanFilter, WriteType};
 use btleplug::api::{Characteristic, Manager as _};
-use btleplug::api::Peripheral as _;
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::stream::StreamExt;
 
