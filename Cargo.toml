@@ -2,6 +2,5 @@
 
 members = [
   "walkingpad_protocol",
-  "walkingpad_derives",
 ]
 
