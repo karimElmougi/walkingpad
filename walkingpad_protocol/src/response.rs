@@ -3,9 +3,22 @@ use super::*;
 use std::convert::{TryFrom, TryInto};
 use std::io::Cursor;
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::ReadBytesExt;
 use strum_macros::FromRepr;
 
+const RESPONSE_HEADER: u8 = 0xf8;
+
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
+enum ResponseType {
+    CurrentRunLiveStats = 0xa2,
+    Settings = 0xa6,
+    StoredRun = 0xa7,
+}
+
+impl_try_from!(u8, ResponseType);
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Response {
     CurrentRunLiveStats {
         state: u8,
@@ -37,16 +50,6 @@ pub enum Response {
     },
 }
 
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
-enum ResponseType {
-    CurrentRunLiveStats = 0xa2,
-    Settings = 0xa6,
-    StoredRun = 0xa7,
-}
-
-impl_try_from!(u8, ResponseType);
-
 impl Response {
     pub fn parse(bytes: &[u8]) -> Result<Response> {
         let mut bytes = Cursor::new(bytes);
@@ -60,6 +63,7 @@ impl Response {
             ResponseType::StoredRun => Response::parse_stored_run(&mut bytes)?,
         };
 
+        let _crc = bytes.read_u8()?;
         Response::parse_footer(&mut bytes)?;
 
         Ok(response)
@@ -70,9 +74,9 @@ impl Response {
             state: reader.read_u8()?,
             speed: reader.read_u8()?.try_into()?,
             mode: reader.read_u8()?,
-            time: reader.read_u32::<BigEndian>()?,
-            distance: reader.read_u32::<BigEndian>()?,
-            steps: reader.read_u32::<BigEndian>()?,
+            time: read_u32(reader)?,
+            distance: read_u32(reader)?,
+            steps: read_u32(reader)?,
         })
     }
 
@@ -93,11 +97,11 @@ impl Response {
 
     fn parse_stored_run(reader: &mut impl ReadBytesExt) -> Result<Response> {
         Ok(Response::StoredRunStats {
-            time: reader.read_u32::<BigEndian>()?,
-            start_time: reader.read_u32::<BigEndian>()?,
-            duration: reader.read_u32::<BigEndian>()?,
-            distance: reader.read_u32::<BigEndian>()?,
-            nb_steps: reader.read_u32::<BigEndian>()?,
+            time: read_u32(reader)?,
+            start_time: read_u32(reader)?,
+            duration: read_u32(reader)?,
+            distance: read_u32(reader)?,
+            nb_steps: read_u32(reader)?,
             nb_remaining: reader.read_u8()?,
         })
     }
@@ -105,7 +109,7 @@ impl Response {
     fn parse_header(reader: &mut impl ReadBytesExt) -> Result<()> {
         let byte = reader.read_u8()?;
 
-        (byte == MESSAGE_HEADER)
+        (byte == RESPONSE_HEADER)
             .then(|| ())
             .ok_or(ProtocolError::InvalidResponseHeader(byte))
     }
@@ -115,6 +119,16 @@ impl Response {
 
         (byte == MESSAGE_FOOTER)
             .then(|| ())
-            .ok_or(ProtocolError::InvalidResponseHeader(byte))
+            .ok_or(ProtocolError::InvalidResponseFooter(byte))
     }
+}
+
+/// Because the Wakling Pad uses 3-byte long integer counters
+fn read_u32(reader: &mut impl ReadBytesExt) -> Result<u32> {
+    Ok(u32::from_be_bytes([
+        0,
+        reader.read_u8()?,
+        reader.read_u8()?,
+        reader.read_u8()?,
+    ]))
 }

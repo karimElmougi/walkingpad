@@ -1,5 +1,6 @@
 use walkingpad_protocol::request::Command;
 use walkingpad_protocol::response::Response;
+use walkingpad_protocol::*;
 
 use std::error::Error;
 use std::time::Duration;
@@ -43,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         write_characteristic,
     )
     .await;
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     println!("Subscribing");
     walkingpad.subscribe(read_characteristic).await.unwrap();
@@ -53,24 +54,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
         async move {
             let mut stream = walkingpad.notifications().await.unwrap();
             while let Some(data) = stream.next().await {
-                println!("{:?}", data.value);
+                match Response::parse(data.value.as_slice()) {
+                    Ok(response) => println!("{:?}", response),
+                    Err(err) => println!("err: {}, data: {:?}", err, data.value),
+                }
             }
         }
     });
 
-    println!("Starting");
-    send(Command::Start, &walkingpad, write_characteristic).await;
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    // println!("Starting");
+    // send(Command::Start, &walkingpad, write_characteristic).await;
+    // tokio::time::sleep(Duration::from_secs(10)).await;
 
     for _ in 0..3 {
         println!("Sending query");
-        send(Command::Query, &walkingpad, write_characteristic).await;
+        send(Command::QueryStoredRuns, &walkingpad, write_characteristic).await;
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
 
-    println!("Stopping");
-    send(Command::Stop, &walkingpad, write_characteristic).await;
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // let response = walkingpad.read(read_characteristic).await.unwrap();
+    // println!("{:?}", Response::parse(response.as_slice()).unwrap());
+
+    // println!("Stopping");
+    // send(Command::Stop, &walkingpad, write_characteristic).await;
+    // tokio::time::sleep(Duration::from_secs(5)).await;
 
     println!("Setting to sleep");
     send(

@@ -37,7 +37,6 @@ impl From<std::io::Error> for ProtocolError {
     }
 }
 
-const MESSAGE_HEADER: u8 = 0xf7;
 const MESSAGE_FOOTER: u8 = 0xfd;
 
 // Stole this from the btleplug crate
@@ -49,8 +48,7 @@ pub const TREADMILL_CHARACTERISTIC_UUID: Uuid =
 pub const TREADMILL_READ_CHARACTERISTIC_UUID: Uuid =
     Uuid::from_u128(BLUETOOTH_BASE_UUID | ((0xfe01) << 96));
 
-pub const WALKINGPAD_SERVICE_UUID: Uuid =
-    Uuid::from_u128(0xfe00 << 96 | 0x1000 << 64 | 0x8000 << 48 | 0x805f9b34fb);
+pub const WALKINGPAD_SERVICE_UUID: Uuid = Uuid::from_u128(BLUETOOTH_BASE_UUID | ((0xfe00) << 96));
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Speed(u8);

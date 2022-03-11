@@ -1,9 +1,12 @@
 use super::*;
 
+const REQUEST_HEADER: u8 = 0xf7;
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Command {
-    // Asks for run statistics maybe? And its SetSettings counterpart asks for current settings?
-    Query,
+    QueryCurrentRunStats,
+    QuerySettings,
+    QueryStoredRuns,
     SetSpeed(Speed),
     SetMode(Mode),
     SetCalibrationMode(bool),
@@ -18,12 +21,22 @@ pub enum Command {
     SetLock(bool),
 }
 
+#[repr(u8)]
+enum RequestType {
+    Command = 0xa2,
+    SetSettings = 0xa6,
+
+    Sync = 0xa7,
+}
+
 impl Command {
     fn code(&self) -> u8 {
         use Command::*;
 
         match self {
-            Query => 0,
+            QueryCurrentRunStats => 0,
+            QuerySettings => 0,
+            QueryStoredRuns => 0xaa,
             SetSpeed(_) => 1,
             SetMode(_) => 2,
             SetCalibrationMode(_) => 2,
@@ -39,34 +52,28 @@ impl Command {
         }
     }
 
-    fn mode(&self) -> u8 {
+    fn request_type(&self) -> u8 {
         use Command::*;
 
         // This is my best guess as to what that particular byte in the command header represents,
         // but I truly have no idea
-        #[repr(u8)]
-        enum Mode {
-            Command = 0xa2,
-            SetSettings = 0xa6,
-
-            #[allow(dead_code)]
-            Unknown = 0xa7, // No idea what this one means, maybe sync?
-        }
 
         let mode = match self {
-            Query => Mode::Command,
-            SetSpeed(_) => Mode::Command,
-            SetMode(_) => Mode::Command,
-            SetCalibrationMode(_) => Mode::SetSettings,
-            SetMaxSpeed(_) => Mode::SetSettings,
-            Start => Mode::Command,
-            Stop => Mode::Command,
-            SetStartSpeed(_) => Mode::SetSettings,
-            SetAutoStart(_) => Mode::SetSettings,
-            SetSensitivity(_) => Mode::SetSettings,
-            SetDisplayInfo(_) => Mode::SetSettings,
-            SetUnit(_) => Mode::SetSettings,
-            SetLock(_) => Mode::SetSettings,
+            QueryCurrentRunStats => RequestType::Command,
+            QuerySettings => RequestType::Sync,
+            QueryStoredRuns => RequestType::Sync,
+            SetSpeed(_) => RequestType::Command,
+            SetMode(_) => RequestType::Command,
+            SetCalibrationMode(_) => RequestType::SetSettings,
+            SetMaxSpeed(_) => RequestType::SetSettings,
+            Start => RequestType::Command,
+            Stop => RequestType::Command,
+            SetStartSpeed(_) => RequestType::SetSettings,
+            SetAutoStart(_) => RequestType::SetSettings,
+            SetSensitivity(_) => RequestType::SetSettings,
+            SetDisplayInfo(_) => RequestType::SetSettings,
+            SetUnit(_) => RequestType::SetSettings,
+            SetLock(_) => RequestType::SetSettings,
         };
 
         mode as u8
@@ -76,7 +83,9 @@ impl Command {
         use Command::*;
 
         let mut param = match self {
-            Query => vec![0],
+            QueryCurrentRunStats => vec![0],
+            QuerySettings => to_bytes(0),
+            QueryStoredRuns => vec![0],
             SetSpeed(speed) => vec![speed.hm_per_hour()],
             SetMode(mode) => vec![*mode as u8],
             Start => vec![1],
@@ -92,7 +101,7 @@ impl Command {
             SetLock(enabled) => to_bytes(*enabled as u32),
         };
 
-        let mut bytes = vec![MESSAGE_HEADER, self.mode(), self.code()];
+        let mut bytes = vec![REQUEST_HEADER, self.request_type(), self.code()];
 
         bytes.append(&mut param);
 
