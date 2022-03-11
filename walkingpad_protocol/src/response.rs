@@ -7,7 +7,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 use strum_macros::FromRepr;
 
 pub enum Response {
-    CurrentRunStats {
+    CurrentRunLiveStats {
         state: u8,
         speed: Speed,
         mode: u8,
@@ -27,15 +27,22 @@ pub enum Response {
         is_locked: bool,
         units: Units,
     },
-    PreviousRuns,
+    StoredRunStats {
+        time: u32,
+        start_time: u32,
+        duration: u32,
+        distance: u32,
+        nb_steps: u32,
+        nb_remaining: u8,
+    },
 }
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 enum ResponseType {
-    CurrentRun = 0xa2,
+    CurrentRunLiveStats = 0xa2,
     Settings = 0xa6,
-    PreviousRun = 0xa7,
+    StoredRun = 0xa7,
 }
 
 impl_try_from!(u8, ResponseType);
@@ -48,9 +55,9 @@ impl Response {
         let response_type = bytes.read_u8()?.try_into()?;
 
         let response = match response_type {
-            ResponseType::CurrentRun => Response::parse_current_run(&mut bytes)?,
+            ResponseType::CurrentRunLiveStats => Response::parse_current_run(&mut bytes)?,
             ResponseType::Settings => Response::parse_settings(&mut bytes)?,
-            ResponseType::PreviousRun => Response::PreviousRuns,
+            ResponseType::StoredRun => Response::parse_stored_run(&mut bytes)?,
         };
 
         Response::parse_footer(&mut bytes)?;
@@ -59,7 +66,7 @@ impl Response {
     }
 
     fn parse_current_run(reader: &mut impl ReadBytesExt) -> Result<Response> {
-        Ok(Response::CurrentRunStats {
+        Ok(Response::CurrentRunLiveStats {
             state: reader.read_u8()?,
             speed: reader.read_u8()?.try_into()?,
             mode: reader.read_u8()?,
@@ -81,6 +88,17 @@ impl Response {
             display: reader.read_u8()?.try_into()?,
             is_locked: reader.read_u8()? != 0,
             units: reader.read_u8()?.try_into()?,
+        })
+    }
+
+    fn parse_stored_run(reader: &mut impl ReadBytesExt) -> Result<Response> {
+        Ok(Response::StoredRunStats {
+            time: reader.read_u32::<BigEndian>()?,
+            start_time: reader.read_u32::<BigEndian>()?,
+            duration: reader.read_u32::<BigEndian>()?,
+            distance: reader.read_u32::<BigEndian>()?,
+            nb_steps: reader.read_u32::<BigEndian>()?,
+            nb_remaining: reader.read_u8()?,
         })
     }
 

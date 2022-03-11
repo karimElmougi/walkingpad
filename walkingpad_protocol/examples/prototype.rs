@@ -1,4 +1,5 @@
-use crabwalkpad::*;
+use walkingpad_protocol::request::Command;
+use walkingpad_protocol::response::Response;
 
 use std::error::Error;
 use std::time::Duration;
