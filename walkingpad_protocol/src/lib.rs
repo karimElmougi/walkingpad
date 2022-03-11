@@ -31,6 +31,12 @@ pub enum ProtocolError {
     ResponseTooShort,
 }
 
+impl From<std::io::Error> for ProtocolError {
+    fn from(_: std::io::Error) -> Self {
+        ProtocolError::ResponseTooShort
+    }
+}
+
 const MESSAGE_HEADER: u8 = 0xf7;
 const MESSAGE_FOOTER: u8 = 0xfd;
 
