@@ -72,18 +72,6 @@ impl TryFrom<u8> for Speed {
     }
 }
 
-macro_rules! impl_try_from {
-    ($int:ty, $enum:ty) => {
-        impl TryFrom<$int> for $enum {
-            type Error = ProtocolError;
-
-            fn try_from(value: $int) -> Result<Self> {
-                Self::from_repr(value).ok_or(ProtocolError::InvalidType(value, stringify!($enum)))
-            }
-        }
-    };
-}
-
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 enum Subject {
@@ -92,7 +80,13 @@ enum Subject {
     StoredStats = 0xa7,
 }
 
-impl_try_from!(u8, Subject);
+impl TryFrom<u8> for Subject {
+    type Error = ProtocolError;
+
+    fn try_from(value: u8) -> Result<Self> {
+        Self::from_repr(value).ok_or(ProtocolError::InvalidType(value, "subject"))
+    }
+}
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
@@ -103,7 +97,13 @@ pub enum Mode {
     Calibration = 4,
 }
 
-impl_try_from!(u8, Mode);
+impl TryFrom<u8> for Mode {
+    type Error = ProtocolError;
+
+    fn try_from(value: u8) -> Result<Self> {
+        Self::from_repr(value).ok_or(ProtocolError::InvalidType(value, "mode"))
+    }
+}
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
@@ -113,7 +113,13 @@ pub enum Sensitivity {
     Low = 3,
 }
 
-impl_try_from!(u8, Sensitivity);
+impl TryFrom<u8> for Sensitivity {
+    type Error = ProtocolError;
+
+    fn try_from(value: u8) -> Result<Self> {
+        Self::from_repr(value).ok_or(ProtocolError::InvalidType(value, "sensitivity"))
+    }
+}
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
@@ -122,7 +128,13 @@ pub enum Units {
     Imperial = 1,
 }
 
-impl_try_from!(u8, Units);
+impl TryFrom<u8> for Units {
+    type Error = ProtocolError;
+
+    fn try_from(value: u8) -> Result<Self> {
+        Self::from_repr(value).ok_or(ProtocolError::InvalidType(value, "units"))
+    }
+}
 
 bitflags! {
     pub struct InfoFlags: u8 {
