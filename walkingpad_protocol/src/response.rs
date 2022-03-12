@@ -2,9 +2,6 @@ use super::*;
 
 use std::convert::TryInto;
 use std::fmt::{Debug, Formatter};
-use std::io::Cursor;
-
-use byteorder::ReadBytesExt;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum MotorState {
@@ -39,15 +36,20 @@ pub struct State {
 }
 
 impl State {
-    fn parse(reader: &mut impl ReadBytesExt) -> Result<State> {
+    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<State> {
         Ok(State {
-            state: reader.read_u8()?.into(),
-            speed: reader.read_u8()?.try_into()?,
-            mode: reader.read_u8()?.try_into()?,
+            state: read_u8(reader)?.into(),
+            speed: read_u8(reader)?.try_into()?,
+            mode: read_u8(reader)?.try_into()?,
             time: read_u32(reader)?,
             distance: read_u32(reader)?,
             steps: read_u32(reader)?,
-            unknown: reader.read_u32::<byteorder::BigEndian>()?.to_be_bytes(),
+            unknown: [
+                read_u8(reader)?,
+                read_u8(reader)?,
+                read_u8(reader)?,
+                read_u8(reader)?,
+            ],
         })
     }
 }
@@ -68,19 +70,24 @@ pub struct Settings {
 }
 
 impl Settings {
-    fn parse(reader: &mut impl ReadBytesExt) -> Result<Settings> {
+    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<Settings> {
         Ok(Settings {
-            goal_type: reader.read_u8()?,
+            goal_type: read_u8(reader)?,
             goal: read_u32(reader)?,
-            calibration: reader.read_u8()?,
-            max_speed: reader.read_u8()?.try_into()?,
-            start_speed: reader.read_u8()?.try_into()?,
-            start_mode: reader.read_u8()?.try_into()?,
-            sensitivity: reader.read_u8()?.try_into()?,
-            display: reader.read_u8()?.try_into()?,
-            is_locked: reader.read_u8()? != 0,
-            units: reader.read_u8()?.try_into()?,
-            unknown: reader.read_u32::<byteorder::BigEndian>()?.to_be_bytes(),
+            calibration: read_u8(reader)?,
+            max_speed: read_u8(reader)?.try_into()?,
+            start_speed: read_u8(reader)?.try_into()?,
+            start_mode: read_u8(reader)?.try_into()?,
+            sensitivity: read_u8(reader)?.try_into()?,
+            display: read_u8(reader)?.try_into()?,
+            is_locked: read_u8(reader)? != 0,
+            units: read_u8(reader)?.try_into()?,
+            unknown: [
+                read_u8(reader)?,
+                read_u8(reader)?,
+                read_u8(reader)?,
+                read_u8(reader)?,
+            ],
         })
     }
 }
@@ -96,16 +103,14 @@ pub struct StoredStats {
 }
 
 impl StoredStats {
-    fn parse(reader: &mut impl ReadBytesExt) -> Result<StoredStats> {
+    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<StoredStats> {
         Ok(StoredStats {
             time: read_u32(reader)?,
             start_time: read_u32(reader)?,
             duration: read_u32(reader)?,
             distance: read_u32(reader)?,
             nb_steps: read_u32(reader)?,
-            next_id: reader
-                .read_u8()
-                .map(|n| if n == 0 { None } else { Some(n) })?,
+            next_id: read_u8(reader).map(|n| if n == 0 { None } else { Some(n) })?,
         })
     }
 }
@@ -136,7 +141,7 @@ impl From<StoredStats> for Response {
 }
 
 impl Debug for Response {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Response::State(inner) => inner.fmt(f),
             Response::Settings(inner) => inner.fmt(f),
@@ -147,26 +152,26 @@ impl Debug for Response {
 
 impl Response {
     pub fn parse(bytes: &[u8]) -> Result<Response> {
-        let mut bytes = Cursor::new(bytes);
+        let mut it = bytes.iter().copied();
 
-        Response::parse_header(&mut bytes)?;
+        Response::parse_header(&mut it)?;
 
-        let subject = bytes.read_u8()?.try_into()?;
+        let subject = read_u8(&mut it)?.try_into()?;
         let response = match subject {
-            Subject::State => State::parse(&mut bytes)?.into(),
-            Subject::Settings => Settings::parse(&mut bytes)?.into(),
-            Subject::StoredStats => StoredStats::parse(&mut bytes)?.into(),
+            Subject::State => State::parse(&mut it)?.into(),
+            Subject::Settings => Settings::parse(&mut it)?.into(),
+            Subject::StoredStats => StoredStats::parse(&mut it)?.into(),
         };
 
-        let _crc = bytes.read_u8()?;
+        let _crc = read_u8(&mut it)?;
 
-        Response::parse_footer(&mut bytes)?;
+        Response::parse_footer(&mut it)?;
 
         Ok(response)
     }
 
-    fn parse_header(reader: &mut impl ReadBytesExt) -> Result<()> {
-        let byte = reader.read_u8()?;
+    fn parse_header(reader: &mut impl Iterator<Item = u8>) -> Result<()> {
+        let byte = read_u8(reader)?;
 
         const RESPONSE_HEADER: u8 = 0xf8;
 
@@ -175,8 +180,8 @@ impl Response {
             .ok_or(ProtocolError::InvalidResponseHeader(byte))
     }
 
-    fn parse_footer(reader: &mut impl ReadBytesExt) -> Result<()> {
-        let byte = reader.read_u8()?;
+    fn parse_footer(reader: &mut impl Iterator<Item = u8>) -> Result<()> {
+        let byte = read_u8(reader)?;
 
         (byte == MESSAGE_FOOTER)
             .then(|| ())
@@ -184,12 +189,16 @@ impl Response {
     }
 }
 
-/// Because the Wakling Pad uses 3-byte long integer counters
-fn read_u32(reader: &mut impl ReadBytesExt) -> Result<u32> {
+/// Because the Wakling Pad uses 3-bytes long integer counters
+fn read_u32(reader: &mut impl Iterator<Item = u8>) -> Result<u32> {
     Ok(u32::from_be_bytes([
         0,
-        reader.read_u8()?,
-        reader.read_u8()?,
-        reader.read_u8()?,
+        read_u8(reader)?,
+        read_u8(reader)?,
+        read_u8(reader)?,
     ]))
+}
+
+fn read_u8(reader: &mut impl Iterator<Item = u8>) -> Result<u8> {
+    reader.next().ok_or(ProtocolError::ResponseTooShort)
 }

@@ -32,12 +32,6 @@ pub enum ProtocolError {
     ResponseTooShort,
 }
 
-impl From<std::io::Error> for ProtocolError {
-    fn from(_: std::io::Error) -> Self {
-        ProtocolError::ResponseTooShort
-    }
-}
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Speed(u8);
 
