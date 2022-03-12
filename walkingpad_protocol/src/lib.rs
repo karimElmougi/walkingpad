@@ -6,7 +6,8 @@ use std::convert::TryFrom;
 use bitflags::bitflags;
 use strum_macros::FromRepr;
 use thiserror::Error;
-use uuid::Uuid;
+
+const MESSAGE_FOOTER: u8 = 0xfd;
 
 type Result<T> = std::result::Result<T, ProtocolError>;
 
@@ -37,19 +38,6 @@ impl From<std::io::Error> for ProtocolError {
     }
 }
 
-const MESSAGE_FOOTER: u8 = 0xfd;
-
-// Stole this from the btleplug crate
-const BLUETOOTH_BASE_UUID: u128 = 0x00000000_0000_1000_8000_00805f9b34fb;
-
-pub const TREADMILL_CHARACTERISTIC_UUID: Uuid =
-    Uuid::from_u128(BLUETOOTH_BASE_UUID | ((0xfe02) << 96));
-
-pub const TREADMILL_READ_CHARACTERISTIC_UUID: Uuid =
-    Uuid::from_u128(BLUETOOTH_BASE_UUID | ((0xfe01) << 96));
-
-pub const WALKINGPAD_SERVICE_UUID: Uuid = Uuid::from_u128(BLUETOOTH_BASE_UUID | ((0xfe00) << 96));
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Speed(u8);
 
@@ -78,7 +66,6 @@ impl TryFrom<u8> for Speed {
     }
 }
 
-#[macro_export]
 macro_rules! impl_try_from {
     ($int:ty, $enum:ty) => {
         impl TryFrom<$int> for $enum {
@@ -90,6 +77,16 @@ macro_rules! impl_try_from {
         }
     };
 }
+
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
+enum Subject {
+    State = 0xa2,
+    Settings = 0xa6,
+    StoredStats = 0xa7,
+}
+
+impl_try_from!(u8, Subject);
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]

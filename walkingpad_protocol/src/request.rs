@@ -1,12 +1,13 @@
 use super::*;
 
-const REQUEST_HEADER: u8 = 0xf7;
+pub const LATEST_STATS: u8 = 255;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Request {
     GetState,
     GetSettings,
-    GetStoredStats,
+    GetStoredStats(u8),
+    ClearStats,
     SetSpeed(Speed),
     SetMode(Mode),
     SetCalibrationMode(bool),
@@ -21,13 +22,6 @@ pub enum Request {
     SetLock(bool),
 }
 
-#[repr(u8)]
-enum Subject {
-    State = 0xa2,
-    Settings = 0xa6,
-    StoredStats = 0xa7,
-}
-
 impl Request {
     fn code(&self) -> u8 {
         use Request::*;
@@ -35,7 +29,8 @@ impl Request {
         match self {
             GetState => 0,
             GetSettings => 0,
-            GetStoredStats => 0xaa,
+            GetStoredStats(_) => 0xaa,
+            ClearStats => 0xaa,
             SetSpeed(_) => 1,
             SetMode(_) => 2,
             SetCalibrationMode(_) => 2,
@@ -57,7 +52,8 @@ impl Request {
         match self {
             GetState => Subject::State,
             GetSettings => Subject::Settings,
-            GetStoredStats => Subject::StoredStats,
+            GetStoredStats(_) => Subject::StoredStats,
+            ClearStats => Subject::StoredStats,
             SetSpeed(_) => Subject::State,
             SetMode(_) => Subject::State,
             SetCalibrationMode(_) => Subject::Settings,
@@ -79,7 +75,8 @@ impl Request {
         let mut param = match self {
             GetState => vec![0],
             GetSettings => to_bytes(0),
-            GetStoredStats => vec![1],
+            GetStoredStats(n) => vec![*n],
+            ClearStats => vec![0],
             SetSpeed(speed) => vec![speed.hm_per_hour()],
             SetMode(mode) => vec![*mode as u8],
             Start => vec![1],
@@ -94,6 +91,8 @@ impl Request {
             SetUnit(unit) => to_bytes(*unit as u32),
             SetLock(enabled) => to_bytes(*enabled as u32),
         };
+
+        const REQUEST_HEADER: u8 = 0xf7;
 
         let mut bytes = vec![REQUEST_HEADER, self.subject() as u8, self.code()];
 

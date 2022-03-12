@@ -1,99 +1,46 @@
 use super::*;
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
+use std::fmt::{Debug, Formatter};
 use std::io::Cursor;
 
 use byteorder::ReadBytesExt;
-use strum_macros::FromRepr;
-
-const RESPONSE_HEADER: u8 = 0xf8;
-
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
-enum ResponseType {
-    CurrentRunLiveStats = 0xa2,
-    Settings = 0xa6,
-    StoredRun = 0xa7,
-}
-
-impl_try_from!(u8, ResponseType);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
-pub enum State {
+pub enum MotorState {
     Stopped,
     Running,
     Starting,
     Unknown(u8),
 }
 
-impl From<u8> for State {
+impl From<u8> for MotorState {
     fn from(value: u8) -> Self {
-        use State::*;
+        use MotorState::*;
 
         match value {
-            0 => Stopped,
-            1 => Running,
-            9 => Starting,
+            0b0000 => Stopped,
+            0b0001 => Running,
+            0b1001 => Starting,
             _ => Unknown(value),
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
-pub enum Response {
-    CurrentRunLiveStats {
-        state: State,
-        speed: Speed,
-        mode: Mode,
-        time: u32,
-        distance: u32,
-        steps: u32,
-        unknown: [u8; 4],
-    },
-    Settings {
-        goal_type: u8,
-        goal: u32,
-        calibration: u8,
-        max_speed: Speed,
-        start_speed: Speed,
-        start_mode: Mode,
-        sensitivity: Sensitivity,
-        display: InfoFlags,
-        is_locked: bool,
-        units: Units,
-        unknown: [u8; 4],
-    },
-    StoredRunStats {
-        time: u32,
-        start_time: u32,
-        duration: u32,
-        distance: u32,
-        nb_steps: u32,
-        nb_remaining: u8,
-    },
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
+pub struct State {
+    pub state: MotorState,
+    pub speed: Speed,
+    pub mode: Mode,
+    pub time: u32,
+    pub distance: u32,
+    pub steps: u32,
+    pub unknown: [u8; 4],
 }
 
-impl Response {
-    pub fn parse(bytes: &[u8]) -> Result<Response> {
-        let mut bytes = Cursor::new(bytes);
-
-        Response::parse_header(&mut bytes)?;
-        let response_type = bytes.read_u8()?.try_into()?;
-
-        let response = match response_type {
-            ResponseType::CurrentRunLiveStats => Response::parse_current_run(&mut bytes)?,
-            ResponseType::Settings => Response::parse_settings(&mut bytes)?,
-            ResponseType::StoredRun => Response::parse_stored_run(&mut bytes)?,
-        };
-
-        let _crc = bytes.read_u8()?;
-        Response::parse_footer(&mut bytes)?;
-
-        Ok(response)
-    }
-
-    fn parse_current_run(reader: &mut impl ReadBytesExt) -> Result<Response> {
-        Ok(Response::CurrentRunLiveStats {
+impl State {
+    fn parse(reader: &mut impl ReadBytesExt) -> Result<State> {
+        Ok(State {
             state: reader.read_u8()?.into(),
             speed: reader.read_u8()?.try_into()?,
             mode: reader.read_u8()?.try_into()?,
@@ -103,9 +50,26 @@ impl Response {
             unknown: reader.read_u32::<byteorder::BigEndian>()?.to_be_bytes(),
         })
     }
+}
 
-    fn parse_settings(reader: &mut impl ReadBytesExt) -> Result<Response> {
-        Ok(Response::Settings {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
+pub struct Settings {
+    pub goal_type: u8,
+    pub goal: u32,
+    pub calibration: u8,
+    pub max_speed: Speed,
+    pub start_speed: Speed,
+    pub start_mode: Mode,
+    pub sensitivity: Sensitivity,
+    pub display: InfoFlags,
+    pub is_locked: bool,
+    pub units: Units,
+    pub unknown: [u8; 4],
+}
+
+impl Settings {
+    fn parse(reader: &mut impl ReadBytesExt) -> Result<Settings> {
+        Ok(Settings {
             goal_type: reader.read_u8()?,
             goal: read_u32(reader)?,
             calibration: reader.read_u8()?,
@@ -119,20 +83,92 @@ impl Response {
             unknown: reader.read_u32::<byteorder::BigEndian>()?.to_be_bytes(),
         })
     }
+}
 
-    fn parse_stored_run(reader: &mut impl ReadBytesExt) -> Result<Response> {
-        Ok(Response::StoredRunStats {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
+pub struct StoredStats {
+    pub time: u32,
+    pub start_time: u32,
+    pub duration: u32,
+    pub distance: u32,
+    pub nb_steps: u32,
+    pub next_id: Option<u8>,
+}
+
+impl StoredStats {
+    fn parse(reader: &mut impl ReadBytesExt) -> Result<StoredStats> {
+        Ok(StoredStats {
             time: read_u32(reader)?,
             start_time: read_u32(reader)?,
             duration: read_u32(reader)?,
             distance: read_u32(reader)?,
             nb_steps: read_u32(reader)?,
-            nb_remaining: reader.read_u8()?,
+            next_id: reader
+                .read_u8()
+                .map(|n| if n == 0 { None } else { Some(n) })?,
         })
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, PartialOrd)]
+pub enum Response {
+    State(State),
+    Settings(Settings),
+    StoredStats(StoredStats),
+}
+
+impl From<State> for Response {
+    fn from(state: State) -> Self {
+        Response::State(state)
+    }
+}
+
+impl From<Settings> for Response {
+    fn from(settings: Settings) -> Self {
+        Response::Settings(settings)
+    }
+}
+
+impl From<StoredStats> for Response {
+    fn from(stored_stats: StoredStats) -> Self {
+        Response::StoredStats(stored_stats)
+    }
+}
+
+impl Debug for Response {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Response::State(inner) => inner.fmt(f),
+            Response::Settings(inner) => inner.fmt(f),
+            Response::StoredStats(inner) => inner.fmt(f),
+        }
+    }
+}
+
+impl Response {
+    pub fn parse(bytes: &[u8]) -> Result<Response> {
+        let mut bytes = Cursor::new(bytes);
+
+        Response::parse_header(&mut bytes)?;
+
+        let subject = bytes.read_u8()?.try_into()?;
+        let response = match subject {
+            Subject::State => State::parse(&mut bytes)?.into(),
+            Subject::Settings => Settings::parse(&mut bytes)?.into(),
+            Subject::StoredStats => StoredStats::parse(&mut bytes)?.into(),
+        };
+
+        let _crc = bytes.read_u8()?;
+
+        Response::parse_footer(&mut bytes)?;
+
+        Ok(response)
     }
 
     fn parse_header(reader: &mut impl ReadBytesExt) -> Result<()> {
         let byte = reader.read_u8()?;
+
+        const RESPONSE_HEADER: u8 = 0xf8;
 
         (byte == RESPONSE_HEADER)
             .then(|| ())
