@@ -1,7 +1,7 @@
 use super::*;
 
-use std::convert::TryInto;
-use std::fmt::{Debug, Formatter};
+use core::convert::TryInto;
+use core::fmt::{Debug, Formatter};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum MotorState {
@@ -166,8 +166,11 @@ impl Response {
         let _crc = read_u8(&mut it)?;
 
         Response::parse_footer(&mut it)?;
-
-        Ok(response)
+        if it.next().is_none() {
+            Ok(response)
+        } else {
+            Err(ProtocolError::BytesAfterFooter)
+        }
     }
 
     fn parse_header(reader: &mut impl Iterator<Item = u8>) -> Result<()> {

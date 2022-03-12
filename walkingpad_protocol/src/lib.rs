@@ -1,35 +1,47 @@
+#![no_std]
+
 pub mod request;
 pub mod response;
 
-use std::convert::TryFrom;
+pub use request::Request;
+pub use response::Response;
+
+use core::convert::TryFrom;
+use core::fmt;
 
 use bitflags::bitflags;
 use strum_macros::FromRepr;
-use thiserror::Error;
 
 const MESSAGE_FOOTER: u8 = 0xfd;
 
-type Result<T> = std::result::Result<T, ProtocolError>;
+type Result<T> = core::result::Result<T, ProtocolError>;
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum ProtocolError {
-    #[error("{0} hm/h is greater than the maximum supported speed of 60 hm/h")]
     InvalidSpeed(u8),
-
-    #[error("{0} isn't a valid {1} type")]
     InvalidType(u8, &'static str),
-
-    #[error("{0} isn't a valid response header")]
     InvalidResponseHeader(u8),
-
-    #[error("{0} isn't a valid response footer")]
     InvalidResponseFooter(u8),
-
-    #[error("the response continues past footer")]
     BytesAfterFooter,
-
-    #[error("the response length doesn't match any known response type or is missing bytes")]
     ResponseTooShort,
+}
+
+impl fmt::Display for ProtocolError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ProtocolError::*;
+        match self {
+            InvalidSpeed(speed) => write!(
+                f,
+                "{} hm/h is greater than the maximum supported speed of 60 hm/h",
+                speed
+            ),
+            InvalidType(byte, typename) => write!(f, "{} isn't a valid {} type", byte, typename),
+            InvalidResponseHeader(byte) => write!(f, "{} isn't a valid response header", byte),
+            InvalidResponseFooter(byte) => write!(f, "{} isn't a valid response footer", byte),
+            BytesAfterFooter => write!(f, "the response continues past footer"),
+            ResponseTooShort => write!(f, "the response is missing bytes"),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
