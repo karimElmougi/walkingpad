@@ -97,6 +97,7 @@ pub enum Mode {
     Auto = 0,
     Manual = 1,
     Sleep = 2,
+    Calibration = 4,
 }
 
 impl_try_from!(u8, Mode);

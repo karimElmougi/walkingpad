@@ -19,18 +19,40 @@ enum ResponseType {
 impl_try_from!(u8, ResponseType);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+pub enum State {
+    Stopped,
+    Running,
+    Starting,
+    Unknown(u8),
+}
+
+impl From<u8> for State {
+    fn from(value: u8) -> Self {
+        use State::*;
+
+        match value {
+            0 => Stopped,
+            1 => Running,
+            9 => Starting,
+            _ => Unknown(value),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Response {
     CurrentRunLiveStats {
-        state: u8,
+        state: State,
         speed: Speed,
-        mode: u8,
+        mode: Mode,
         time: u32,
         distance: u32,
         steps: u32,
+        unknown: [u8; 4],
     },
     Settings {
         goal_type: u8,
-        goal: u8,
+        goal: u32,
         calibration: u8,
         max_speed: Speed,
         start_speed: Speed,
@@ -39,6 +61,7 @@ pub enum Response {
         display: InfoFlags,
         is_locked: bool,
         units: Units,
+        unknown: [u8; 4],
     },
     StoredRunStats {
         time: u32,
@@ -71,19 +94,20 @@ impl Response {
 
     fn parse_current_run(reader: &mut impl ReadBytesExt) -> Result<Response> {
         Ok(Response::CurrentRunLiveStats {
-            state: reader.read_u8()?,
+            state: reader.read_u8()?.into(),
             speed: reader.read_u8()?.try_into()?,
-            mode: reader.read_u8()?,
+            mode: reader.read_u8()?.try_into()?,
             time: read_u32(reader)?,
             distance: read_u32(reader)?,
             steps: read_u32(reader)?,
+            unknown: reader.read_u32::<byteorder::BigEndian>()?.to_be_bytes(),
         })
     }
 
     fn parse_settings(reader: &mut impl ReadBytesExt) -> Result<Response> {
         Ok(Response::Settings {
             goal_type: reader.read_u8()?,
-            goal: reader.read_u8()?,
+            goal: read_u32(reader)?,
             calibration: reader.read_u8()?,
             max_speed: reader.read_u8()?.try_into()?,
             start_speed: reader.read_u8()?.try_into()?,
@@ -92,6 +116,7 @@ impl Response {
             display: reader.read_u8()?.try_into()?,
             is_locked: reader.read_u8()? != 0,
             units: reader.read_u8()?.try_into()?,
+            unknown: reader.read_u32::<byteorder::BigEndian>()?.to_be_bytes(),
         })
     }
 

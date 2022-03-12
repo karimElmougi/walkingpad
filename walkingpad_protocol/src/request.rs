@@ -60,7 +60,7 @@ impl Command {
 
         let mode = match self {
             QueryCurrentRunStats => RequestType::Command,
-            QuerySettings => RequestType::Sync,
+            QuerySettings => RequestType::SetSettings,
             QueryStoredRuns => RequestType::Sync,
             SetSpeed(_) => RequestType::Command,
             SetMode(_) => RequestType::Command,
@@ -85,7 +85,7 @@ impl Command {
         let mut param = match self {
             QueryCurrentRunStats => vec![0],
             QuerySettings => to_bytes(0),
-            QueryStoredRuns => vec![0],
+            QueryStoredRuns => vec![1],
             SetSpeed(speed) => vec![speed.hm_per_hour()],
             SetMode(mode) => vec![*mode as u8],
             Start => vec![1],
