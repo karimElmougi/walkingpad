@@ -1,120 +1,167 @@
 use super::*;
 
-pub const LATEST_STATS: u8 = 255;
+const REQUEST_HEADER: u8 = 0xf7;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
-pub enum Request {
-    GetState,
-    GetSettings,
-    GetStoredStats(u8),
-    ClearStats,
-    SetSpeed(Speed),
-    SetMode(Mode),
-    SetCalibrationMode(bool),
-    SetMaxSpeed(Speed),
-    Start, // This actually acts as a toggle it seems
-    Stop,
-    SetStartSpeed(Speed),
-    SetAutoStart(bool),
-    SetSensitivity(Sensitivity),
-    SetDisplayInfo(InfoFlags),
-    SetUnit(Units),
-    SetLock(bool),
-}
+#[derive(Copy, Clone, Default, Debug, Eq, PartialEq, PartialOrd)]
+pub struct Request;
 
 impl Request {
-    fn code(&self) -> u8 {
-        use Request::*;
-
-        match self {
-            GetState => 0,
-            GetSettings => 0,
-            GetStoredStats(_) => 0xaa,
-            ClearStats => 0xaa,
-            SetSpeed(_) => 1,
-            SetMode(_) => 2,
-            SetCalibrationMode(_) => 2,
-            SetMaxSpeed(_) => 3,
-            Start => 4,
-            Stop => 4,
-            SetStartSpeed(_) => 4,
-            SetAutoStart(_) => 5,
-            SetSensitivity(_) => 6,
-            SetDisplayInfo(_) => 7,
-            SetUnit(_) => 8,
-            SetLock(_) => 9,
-        }
+    pub const fn get() -> Get {
+        Get
     }
 
-    fn subject(&self) -> Subject {
-        use Request::*;
-
-        match self {
-            GetState => Subject::State,
-            GetSettings => Subject::Settings,
-            GetStoredStats(_) => Subject::StoredStats,
-            ClearStats => Subject::StoredStats,
-            SetSpeed(_) => Subject::State,
-            SetMode(_) => Subject::State,
-            SetCalibrationMode(_) => Subject::Settings,
-            SetMaxSpeed(_) => Subject::Settings,
-            Start => Subject::State,
-            Stop => Subject::State,
-            SetStartSpeed(_) => Subject::Settings,
-            SetAutoStart(_) => Subject::Settings,
-            SetSensitivity(_) => Subject::Settings,
-            SetDisplayInfo(_) => Subject::Settings,
-            SetUnit(_) => Subject::Settings,
-            SetLock(_) => Subject::Settings,
-        }
+    pub const fn set() -> Set {
+        Set
     }
 
-    pub fn as_bytes(&self) -> Vec<u8> {
-        use Request::*;
+    pub const fn clear_stats() -> [u8; 6] {
+        u8_param(0xaa, Subject::StoredStats, 0)
+    }
 
-        let mut param = match self {
-            GetState => vec![0],
-            GetSettings => to_bytes(0),
-            GetStoredStats(n) => vec![*n],
-            ClearStats => vec![0],
-            SetSpeed(speed) => vec![speed.hm_per_hour()],
-            SetMode(mode) => vec![*mode as u8],
-            Start => vec![1],
-            Stop => vec![0],
+    pub const fn start() -> [u8; 6] {
+        u8_param(4, Subject::State, true as u8)
+    }
 
-            SetCalibrationMode(enabled) => to_bytes(*enabled as u32),
-            SetStartSpeed(speed) => to_bytes(speed.hm_per_hour() as u32),
-            SetMaxSpeed(speed) => to_bytes(speed.hm_per_hour() as u32),
-            SetSensitivity(sensitivity) => to_bytes(*sensitivity as u32),
-            SetAutoStart(enabled) => to_bytes(*enabled as u32),
-            SetDisplayInfo(info) => to_bytes(info.bits() as u32),
-            SetUnit(unit) => to_bytes(*unit as u32),
-            SetLock(enabled) => to_bytes(*enabled as u32),
-        };
+    pub const fn stop() -> [u8; 6] {
+        u8_param(4, Subject::State, false as u8)
+    }
+}
 
-        const REQUEST_HEADER: u8 = 0xf7;
+#[derive(Copy, Clone, Default, Debug, Eq, PartialEq, PartialOrd)]
+pub struct Get;
 
-        let mut bytes = vec![REQUEST_HEADER, self.subject() as u8, self.code()];
+impl Get {
+    pub const fn state(self) -> [u8; 6] {
+        u8_param(0, Subject::State, 0)
+    }
 
-        bytes.append(&mut param);
+    pub const fn settings(self) -> [u8; 6] {
+        u8_param(0, Subject::Settings, 0)
+    }
 
-        bytes.push(compute_crc(&bytes[1..]));
+    pub const fn latest_stored_stats(self) -> [u8; 6] {
+        const LATEST_STATS: u8 = 255;
+        u8_param(0xaa, Subject::StoredStats, LATEST_STATS)
+    }
+    pub const fn stored_stats(self, id: u8) -> [u8; 6] {
+        u8_param(0xaa, Subject::StoredStats, id)
+    }
+}
 
-        bytes.push(MESSAGE_FOOTER);
+#[derive(Copy, Clone, Default, Debug, Eq, PartialEq, PartialOrd)]
+pub struct Set;
 
-        bytes
+impl Set {
+    pub const fn speed(self, speed: Speed) -> [u8; 6] {
+        u8_param(1, Subject::State, speed.hm_per_hour())
+    }
+
+    pub const fn mode(self, mode: Mode) -> [u8; 6] {
+        u8_param(2, Subject::State, mode as u8)
+    }
+
+    pub const fn calibration_mode(self, enabled: bool) -> [u8; 9] {
+        u32_param(2, Subject::Settings, enabled as u32)
+    }
+
+    pub const fn max_speed(self, speed: Speed) -> [u8; 9] {
+        u32_param(3, Subject::Settings, speed.hm_per_hour() as u32)
+    }
+
+    pub const fn start_speed(self, speed: Speed) -> [u8; 9] {
+        u32_param(4, Subject::Settings, speed.hm_per_hour() as u32)
+    }
+
+    pub const fn auto_start(self, enabled: bool) -> [u8; 9] {
+        u32_param(5, Subject::Settings, enabled as u32)
+    }
+
+    pub const fn sensitivity(self, sensitivity: Sensitivity) -> [u8; 9] {
+        u32_param(6, Subject::Settings, sensitivity as u32)
+    }
+
+    pub const fn display(self, flags: InfoFlags) -> [u8; 9] {
+        u32_param(7, Subject::Settings, flags.bits() as u32)
+    }
+
+    pub const fn units(self, units: Units) -> [u8; 9] {
+        u32_param(8, Subject::Settings, units as u32)
+    }
+
+    pub const fn locked(self, is_locked: bool) -> [u8; 9] {
+        u32_param(9, Subject::Settings, is_locked as u32)
     }
 }
 
 /// Computes the simplistic CRC checksum scheme of the message's contents.
-/// The bytes must exclude any header or footer values.
-fn compute_crc(message: &[u8]) -> u8 {
-    message
-        .iter()
-        .copied()
-        .fold(0, |crc, byte| crc.wrapping_add(byte))
+const fn crc<const N: usize>(mut bytes: [u8; N]) -> [u8; N] {
+    let mut crc = 0u8;
+    // Skip header and footer
+    let mut i = 1;
+    while i < N - 1 {
+        crc = crc.wrapping_add(bytes[i]);
+        i += 1;
+    }
+    bytes[N - 2] = crc;
+    bytes
 }
 
-fn to_bytes(val: u32) -> Vec<u8> {
-    val.to_be_bytes().to_vec()
+const fn u8_param(code: u8, subject: Subject, param: u8) -> [u8; 6] {
+    crc([
+        REQUEST_HEADER,
+        subject as u8,
+        code,
+        param,
+        0,
+        MESSAGE_FOOTER,
+    ])
+}
+
+const fn u32_param(code: u8, subject: Subject, param: u32) -> [u8; 9] {
+    let param = param.to_be_bytes();
+    crc([
+        REQUEST_HEADER,
+        subject as u8,
+        code,
+        param[0],
+        param[1],
+        param[2],
+        param[3],
+        0,
+        MESSAGE_FOOTER,
+    ])
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test() {
+        assert_eq!(
+            u8_param(8, Subject::State, 1),
+            [
+                REQUEST_HEADER,
+                Subject::State as u8,
+                8,
+                1,
+                171,
+                MESSAGE_FOOTER
+            ]
+        );
+        assert_eq!(
+            u32_param(8, Subject::State, u32::from_be_bytes([1, 2, 3, 4])),
+            [
+                REQUEST_HEADER,
+                Subject::State as u8,
+                8,
+                1,
+                2,
+                3,
+                4,
+                180,
+                MESSAGE_FOOTER
+            ]
+        );
+    }
 }

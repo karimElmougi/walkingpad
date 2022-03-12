@@ -43,7 +43,7 @@ pub struct Speed(u8);
 
 impl Speed {
     // An hectometer is 100 meters, or 0.1 kilometers
-    fn hm_per_hour(&self) -> u8 {
+    const fn hm_per_hour(&self) -> u8 {
         self.0
     }
 }
