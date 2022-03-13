@@ -3,6 +3,7 @@ use super::*;
 use core::convert::TryInto;
 use core::fmt::{Debug, Formatter};
 
+/// Defines the state the Walkingpad's motor can be in.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum MotorState {
     Stopped,
@@ -24,14 +25,29 @@ impl From<u8> for MotorState {
     }
 }
 
+/// Reprents the current state of the Walkingpad.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
 pub struct State {
+    /// The state of the motor.
     pub state: MotorState,
+
+    /// The current speed.
     pub speed: Speed,
+
+    /// The current operational mode.
     pub mode: Mode,
+
+    /// The current time on the Walkingpad's internal clock.
     pub time: u32,
+
+    /// The distance currently traveled.
     pub distance: u32,
+
+    /// The number of steps counted so far.
     pub steps: u32,
+
+    /// Bytes whose meaning is undetermined.
+    /// The third byte appears to correspond to button presses from the remote.
     pub unknown: [u8; 4],
 }
 
@@ -39,7 +55,7 @@ impl State {
     fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<State> {
         Ok(State {
             state: read_u8(reader)?.into(),
-            speed: read_u8(reader)?.try_into()?,
+            speed: read_u8(reader).and_then(Speed::from_hm_per_hour)?,
             mode: read_u8(reader)?.try_into()?,
             time: read_u32(reader)?,
             distance: read_u32(reader)?,
@@ -54,18 +70,40 @@ impl State {
     }
 }
 
+/// Represents the settings stored on the Walkingpad.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Settings {
+    /// The significance of this field is unclear.
     pub goal_type: u8,
+
+    /// The significance of this field is unclear.
     pub goal: u32,
+
+    /// This field may represent whether the Walkingpad is in calibration mode.
     pub calibration: u8,
+
+    /// The maxmimum speed the Walkingpad can be set to.
     pub max_speed: Speed,
+
+    /// The speed the Walkingpad starts any run at.
     pub start_speed: Speed,
+
+    /// The mode the Walkingpad boots up into.
     pub start_mode: Mode,
+
+    /// The default sensitivity of the Automatic mode.
     pub sensitivity: Sensitivity,
+
+    /// The currently displayed statistics on the Walkingpad's on-board display.
     pub display: InfoFlags,
+
+    /// Whether the Walkingpad's state is locked.
     pub is_locked: bool,
+
+    /// The units of measurement used on the Walkingpad's display.
     pub units: Units,
+
+    /// Bytes whose meaning is undetermined.
     pub unknown: [u8; 4],
 }
 
@@ -75,8 +113,8 @@ impl Settings {
             goal_type: read_u8(reader)?,
             goal: read_u32(reader)?,
             calibration: read_u8(reader)?,
-            max_speed: read_u8(reader)?.try_into()?,
-            start_speed: read_u8(reader)?.try_into()?,
+            max_speed: read_u8(reader).and_then(Speed::from_hm_per_hour)?,
+            start_speed: read_u8(reader).and_then(Speed::from_hm_per_hour)?,
             start_mode: read_u8(reader)?.try_into()?,
             sensitivity: read_u8(reader)?.try_into()?,
             display: read_u8(reader)?.try_into()?,
@@ -92,13 +130,28 @@ impl Settings {
     }
 }
 
+/// Represents the records of statistics of past runs stored on the device.
+/// These records effectively form a linked list through the `next_id` field, with the id 255
+/// representing the latest record.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
 pub struct StoredStats {
+    /// The current time on the Walkingpad's internal clock.
+    /// It appears to only tick while the belt is running and starts at 0 on first boot.
     pub time: u32,
+
+    /// The start time of this run on the internal clock.
     pub start_time: u32,
+
+    /// The duration of the run.
     pub duration: u32,
+
+    /// The distance traveled during the run, in decimeters (10 meters).
     pub distance: u32,
+
+    /// The number of steps recorded during the run.
     pub nb_steps: u32,
+
+    /// The id of the next record.
     pub next_id: Option<u8>,
 }
 
@@ -115,6 +168,7 @@ impl StoredStats {
     }
 }
 
+/// Defines the types of responses that can be received from the Walkingpad.
 #[derive(Clone, Copy, Eq, PartialEq, PartialOrd)]
 pub enum Response {
     State(State),
@@ -192,8 +246,8 @@ impl Response {
     }
 }
 
-/// Because the Wakling Pad uses 3-bytes long integer counters
 fn read_u32(reader: &mut impl Iterator<Item = u8>) -> Result<u32> {
+    // Because the Wakling Pad uses 3-bytes long integer counters in respones
     Ok(u32::from_be_bytes([
         0,
         read_u8(reader)?,

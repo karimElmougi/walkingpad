@@ -1,3 +1,10 @@
+/*!
+    Structs and functions for implementing the Walkingpad A1 Pro protocol.
+
+    The Walkingpad communicates over Bluetooth Low Energy, so a library like btleplug may be
+    used in conjunction with this one to control and query the pad.
+*/
+
 #![no_std]
 
 pub mod request;
@@ -44,34 +51,38 @@ impl fmt::Display for ProtocolError {
     }
 }
 
+/// Represents the speed values used in requests and responses.
+/// The Walkingpad displays speeds in kilometers per second, but stores them internally in
+/// hectometers (100 meters) per seconds to represent fractional values.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Speed(u8);
 
 impl Speed {
-    // An hectometer is 100 meters, or 0.1 kilometers
-    const fn hm_per_hour(&self) -> u8 {
-        self.0
+    pub const fn from_km_per_hour(value: u8) -> Result<Speed> {
+        Speed::from_hm_per_hour(value * 10)
     }
-}
 
-impl Default for Speed {
-    fn default() -> Self {
-        Self(20)
-    }
-}
-
-impl TryFrom<u8> for Speed {
-    type Error = ProtocolError;
-
-    fn try_from(value: u8) -> Result<Self> {
+    pub const fn from_hm_per_hour(value: u8) -> Result<Speed> {
         if value <= 60 {
             Ok(Speed(value))
         } else {
             Err(ProtocolError::InvalidSpeed(value))
         }
     }
+
+    pub const fn hm_per_hour(&self) -> u8 {
+        self.0
+    }
 }
 
+impl Default for Speed {
+    fn default() -> Self {
+        // This is the default speed when the device is first turned on from the factory.
+        Self(20)
+    }
+}
+
+/// Defines the subjects which can be queried or set on the Walkingpad.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 enum Subject {
@@ -88,12 +99,21 @@ impl TryFrom<u8> for Subject {
     }
 }
 
+/// Defines the operational modes the Walkingpad can be in.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 pub enum Mode {
+    /// In the Automatic mode, the Walkingpad will automatically adjust the belt speed to keep the
+    /// user roughly within the center.
     Auto = 0,
+
+    /// In the Manual mode, the Walkingpad works as expected, with all speed adjustments happening
+    /// through either the remote or a Bluetooth command.
     Manual = 1,
+
     Sleep = 2,
+
+    /// In the Calibration mode, the Walkingpad simply runs continuously at a speed of 4 km/h.
     Calibration = 4,
 }
 
@@ -105,6 +125,7 @@ impl TryFrom<u8> for Mode {
     }
 }
 
+/// Defines the sensitivy levels for the Walkingpad's Automatic mode.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 pub enum Sensitivity {
@@ -121,6 +142,7 @@ impl TryFrom<u8> for Sensitivity {
     }
 }
 
+/// Defines the units of measure used by the display on the Walkingpad.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 pub enum Units {
@@ -137,6 +159,14 @@ impl TryFrom<u8> for Units {
 }
 
 bitflags! {
+    /// Defines the kinds of statistics the Walkingpad will cycle through on its display.
+    ///
+    /// ```rust
+    /// use crate::Request;
+    ///
+    /// use InfoFlags::*;
+    /// let request = Request.set().display(TIME | SPEED);
+    /// ```
     pub struct InfoFlags: u8 {
         const NONE = 0b0;
         const TIME = 0b1;
