@@ -15,9 +15,13 @@ pub use response::Response;
 
 use core::convert::TryFrom;
 use core::fmt;
+use core::ops;
 
 use bitflags::bitflags;
 use strum_macros::FromRepr;
+
+#[macro_use]
+extern crate impl_ops;
 
 const MESSAGE_FOOTER: u8 = 0xfd;
 
@@ -55,30 +59,155 @@ impl fmt::Display for ProtocolError {
 /// The Walkingpad displays speeds in kilometers per second, but stores them internally in
 /// hectometers (100 meters) per seconds to represent fractional values.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
-pub struct Speed(u8);
+pub struct Speed {
+    inner: u8,
+}
 
 impl Speed {
-    pub const fn from_km_per_hour(value: u8) -> Result<Speed> {
-        Speed::from_hm_per_hour(value * 10)
+    const MAX: u8 = 60;
+
+    /// Clamps to the highest speed of 6 km/h.
+    pub const fn from_km_per_hour(value: u8) -> Speed {
+        match Speed::try_from_km_per_hour(value) {
+            Ok(speed) => speed,
+            Err(_) => Speed {
+                inner: Speed::MAX / 10,
+            },
+        }
     }
 
-    pub const fn from_hm_per_hour(value: u8) -> Result<Speed> {
-        if value <= 60 {
-            Ok(Speed(value))
+    pub const fn try_from_km_per_hour(value: u8) -> Result<Speed> {
+        Speed::try_from_hm_per_hour(value * 10)
+    }
+
+    /// Clamps to the highest speed of 60 hm/h.
+    pub const fn from_hm_per_hour(value: u8) -> Speed {
+        match Speed::try_from_hm_per_hour(value) {
+            Ok(speed) => speed,
+            Err(_) => Speed { inner: Speed::MAX },
+        }
+    }
+
+    pub const fn try_from_hm_per_hour(value: u8) -> Result<Speed> {
+        if value <= Speed::MAX {
+            Ok(Speed { inner: value })
         } else {
             Err(ProtocolError::InvalidSpeed(value))
         }
     }
 
-    pub const fn hm_per_hour(&self) -> u8 {
-        self.0
+    pub const fn hm_per_hour(self) -> u8 {
+        self.inner
+    }
+
+    /// Does an integer division of the inner hectometer value.
+    pub const fn km_per_hour(self) -> u8 {
+        self.hm_per_hour() / 10
     }
 }
 
 impl Default for Speed {
     fn default() -> Self {
         // This is the default speed when the device is first turned on from the factory.
-        Self(20)
+        Self { inner: 20 }
+    }
+}
+
+impl_op_ex!(+ |a: &Speed, b: &u8| -> Speed { Speed::from_hm_per_hour(a.inner + b) });
+impl_op_ex!(+ |a: &Speed, b: &Speed| -> Speed { ops::Add::add(a, b.inner) });
+
+impl<T> ops::Add<T> for &mut Speed
+where
+    <Self as ops::Deref>::Target: ops::Add<T>,
+{
+    type Output = <Speed as ops::Add<T>>::Output;
+
+    fn add(self, rhs: T) -> Self::Output {
+        ops::Add::add(*self, rhs)
+    }
+}
+
+impl<T> ops::Add<&mut T> for &'_ Speed
+where
+    T: Copy,
+    Speed: ops::Add<T>,
+{
+    type Output = <Speed as ops::Add<T>>::Output;
+
+    fn add(self, rhs: &mut T) -> Self::Output {
+        ops::Add::add(*self, *rhs)
+    }
+}
+
+impl<T> ops::Add<&mut T> for Speed
+where
+    T: Copy,
+    Self: ops::Add<T>,
+{
+    type Output = <Speed as ops::Add<T>>::Output;
+
+    fn add(self, rhs: &mut T) -> Self::Output {
+        ops::Add::add(self, *rhs)
+    }
+}
+
+impl<T> ops::AddAssign<T> for Speed
+where
+    Speed: ops::Add<T, Output = Speed>,
+{
+    fn add_assign(&mut self, rhs: T) {
+        *self = ops::Add::add(*self, rhs);
+    }
+}
+
+impl_op_ex!(-|a: &Speed, b: &u8| -> Speed {
+    Speed {
+        inner: a.inner.saturating_sub(*b),
+    }
+});
+impl_op_ex!(-|a: &Speed, b: &Speed| -> Speed { ops::Sub::sub(a, b.inner) });
+
+impl<T> ops::Sub<T> for &mut Speed
+where
+    <Self as ops::Deref>::Target: ops::Sub<T>,
+{
+    type Output = <Speed as ops::Sub<T>>::Output;
+
+    fn sub(self, rhs: T) -> Self::Output {
+        ops::Sub::sub(*self, rhs)
+    }
+}
+
+impl<T> ops::Sub<&mut T> for &'_ Speed
+where
+    T: Copy,
+    Speed: ops::Sub<T>,
+{
+    type Output = <Speed as ops::Sub<T>>::Output;
+
+    fn sub(self, rhs: &mut T) -> Self::Output {
+        ops::Sub::sub(*self, *rhs)
+    }
+}
+
+impl<T> ops::Sub<&mut T> for Speed
+where
+    T: Copy,
+    Self: ops::Sub<T>,
+{
+    type Output = <Speed as ops::Sub<T>>::Output;
+
+    fn sub(self, rhs: &mut T) -> Self::Output {
+        ops::Sub::sub(self, *rhs)
+    }
+}
+
+impl<T> ops::SubAssign<T> for Speed
+where
+    Speed: ops::Sub<T, Output = Speed>,
+{
+    fn sub_assign(&mut self, rhs: T) {
+        *self = ops::Sub::sub(*self, rhs);
     }
 }
 
@@ -162,10 +291,10 @@ bitflags! {
     /// Defines the kinds of statistics the Walkingpad will cycle through on its display.
     ///
     /// ```rust
-    /// use crate::Request;
+    /// use walkingpad_protocol::Request;
+    /// use walkingpad_protocol::InfoFlags;
     ///
-    /// use InfoFlags::*;
-    /// let request = Request.set().display(TIME | SPEED);
+    /// let request = Request::set().display(InfoFlags::TIME | InfoFlags::SPEED);
     /// ```
     pub struct InfoFlags: u8 {
         const NONE = 0b0;
@@ -182,5 +311,50 @@ impl TryFrom<u8> for InfoFlags {
 
     fn try_from(value: u8) -> Result<Self> {
         Self::from_bits(value).ok_or(ProtocolError::InvalidType(value, "InfoFlags"))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test() {
+        let mut a = Speed::from_hm_per_hour(10);
+        let mut b = Speed::from_hm_per_hour(55);
+        assert_eq!(0, (a - b).hm_per_hour());
+        assert_eq!(45, (b - a).hm_per_hour());
+        assert_eq!(60, (b + a).hm_per_hour());
+        assert_eq!(60, (a + b).hm_per_hour());
+
+        assert_eq!(60, (&mut a + &mut b).hm_per_hour());
+        assert_eq!(60, (&mut a + &b).hm_per_hour());
+        assert_eq!(60, (&a + &mut b).hm_per_hour());
+        assert_eq!(60, (&a + &b).hm_per_hour());
+        assert_eq!(60, (&a + b).hm_per_hour());
+        assert_eq!(60, (a + &b).hm_per_hour());
+        assert_eq!(60, (a + b).hm_per_hour());
+        assert_eq!(60, (&mut a + b).hm_per_hour());
+        assert_eq!(60, (a + &mut b).hm_per_hour());
+
+        assert_eq!(0, (&mut a - &mut b).hm_per_hour());
+        assert_eq!(0, (&mut a - &b).hm_per_hour());
+        assert_eq!(0, (&a - &mut b).hm_per_hour());
+        assert_eq!(0, (&a - &b).hm_per_hour());
+        assert_eq!(0, (&a - b).hm_per_hour());
+        assert_eq!(0, (a - &b).hm_per_hour());
+        assert_eq!(0, (a - b).hm_per_hour());
+        assert_eq!(0, (&mut a - b).hm_per_hour());
+        assert_eq!(0, (a - &mut b).hm_per_hour());
+
+        a += 5;
+        assert_eq!(15, a.hm_per_hour());
+        a += Speed::default();
+        assert_eq!(35, a.hm_per_hour());
+
+        b -= 5;
+        assert_eq!(50, b.hm_per_hour());
+        b -= Speed::default();
+        assert_eq!(30, b.hm_per_hour());
     }
 }

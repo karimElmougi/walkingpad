@@ -55,7 +55,7 @@ impl State {
     fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<State> {
         Ok(State {
             state: read_u8(reader)?.into(),
-            speed: read_u8(reader).and_then(Speed::from_hm_per_hour)?,
+            speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
             mode: read_u8(reader)?.try_into()?,
             time: read_u32(reader)?,
             distance: read_u32(reader)?,
@@ -74,13 +74,13 @@ impl State {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Settings {
     /// The significance of this field is unclear.
-    pub goal_type: u8,
+    pub goal_type: u8, // TODO: What even is this?
 
     /// The significance of this field is unclear.
-    pub goal: u32,
+    pub goal: u32, // TODO: What even is this?
 
     /// This field may represent whether the Walkingpad is in calibration mode.
-    pub calibration: u8,
+    pub calibration: u8, // TODO: is this a boolean, or something else?
 
     /// The maxmimum speed the Walkingpad can be set to.
     pub max_speed: Speed,
@@ -98,13 +98,13 @@ pub struct Settings {
     pub display: InfoFlags,
 
     /// Whether the Walkingpad's state is locked.
-    pub is_locked: bool,
+    pub is_locked: bool, // TODO: Need to confirm what this actually does
 
     /// The units of measurement used on the Walkingpad's display.
     pub units: Units,
 
     /// Bytes whose meaning is undetermined.
-    pub unknown: [u8; 4],
+    pub unknown: [u8; 4], // TODO: Figure out what those are
 }
 
 impl Settings {
@@ -113,8 +113,8 @@ impl Settings {
             goal_type: read_u8(reader)?,
             goal: read_u32(reader)?,
             calibration: read_u8(reader)?,
-            max_speed: read_u8(reader).and_then(Speed::from_hm_per_hour)?,
-            start_speed: read_u8(reader).and_then(Speed::from_hm_per_hour)?,
+            max_speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
+            start_speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
             start_mode: read_u8(reader)?.try_into()?,
             sensitivity: read_u8(reader)?.try_into()?,
             display: read_u8(reader)?.try_into()?,
@@ -136,7 +136,7 @@ impl Settings {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
 pub struct StoredStats {
     /// The current time on the Walkingpad's internal clock.
-    /// It appears to only tick while the belt is running and starts at 0 on first boot.
+    /// It only tick while the belt is running and starts at 0 on first boot.
     pub time: u32,
 
     /// The start time of this run on the internal clock.
