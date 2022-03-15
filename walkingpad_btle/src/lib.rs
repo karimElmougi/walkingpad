@@ -28,7 +28,7 @@ impl Display for Error {
         use Error::*;
 
         match self {
-            ConnectionError(inner) => write!(f, "Error connecting to the Walkingpad: {}", inner),
+            ConnectionError(inner) => write!(f, "Error connecting to the WalkingPad: {}", inner),
             NoAdapters => write!(f, "No bluetooth adapters found"),
         }
     }

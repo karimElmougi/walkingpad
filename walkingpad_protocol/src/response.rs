@@ -3,7 +3,7 @@ use super::*;
 use core::convert::TryInto;
 use core::fmt::{Debug, Formatter};
 
-/// Defines the state the Walkingpad's motor can be in.
+/// Defines the state the WalkingPad's motor can be in.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum MotorState {
     Stopped,
@@ -25,7 +25,7 @@ impl From<u8> for MotorState {
     }
 }
 
-/// Reprents the current state of the Walkingpad.
+/// Reprents the current state of the WalkingPad.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
 pub struct State {
     /// The state of the motor.
@@ -37,7 +37,7 @@ pub struct State {
     /// The current operational mode.
     pub mode: Mode,
 
-    /// The current time on the Walkingpad's internal clock.
+    /// The current time on the WalkingPad's internal clock.
     pub time: u32,
 
     /// The distance currently traveled.
@@ -70,7 +70,7 @@ impl State {
     }
 }
 
-/// Represents the settings stored on the Walkingpad.
+/// Represents the settings stored on the WalkingPad.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Settings {
     /// The significance of this field is unclear.
@@ -79,28 +79,28 @@ pub struct Settings {
     /// The significance of this field is unclear.
     pub goal: u32, // TODO: What even is this?
 
-    /// This field may represent whether the Walkingpad is in calibration mode.
+    /// This field may represent whether the WalkingPad is in calibration mode.
     pub calibration: u8, // TODO: is this a boolean, or something else?
 
-    /// The maxmimum speed the Walkingpad can be set to.
+    /// The maxmimum speed the WalkingPad can be set to.
     pub max_speed: Speed,
 
-    /// The speed the Walkingpad starts any run at.
+    /// The speed the WalkingPad starts any run at.
     pub start_speed: Speed,
 
-    /// The mode the Walkingpad boots up into.
+    /// The mode the WalkingPad boots up into.
     pub start_mode: Mode,
 
     /// The default sensitivity of the Automatic mode.
     pub sensitivity: Sensitivity,
 
-    /// The currently displayed statistics on the Walkingpad's on-board display.
+    /// The currently displayed statistics on the WalkingPad's on-board display.
     pub display: InfoFlags,
 
-    /// Whether the Walkingpad's state is locked.
+    /// Whether the WalkingPad's state is locked.
     pub is_locked: bool, // TODO: Need to confirm what this actually does
 
-    /// The units of measurement used on the Walkingpad's display.
+    /// The units of measurement used on the WalkingPad's display.
     pub units: Units,
 
     /// Bytes whose meaning is undetermined.
@@ -135,7 +135,7 @@ impl Settings {
 /// representing the latest record.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
 pub struct StoredStats {
-    /// The current time on the Walkingpad's internal clock.
+    /// The current time on the WalkingPad's internal clock.
     /// It only tick while the belt is running and starts at 0 on first boot.
     pub time: u32,
 
@@ -168,7 +168,7 @@ impl StoredStats {
     }
 }
 
-/// Defines the types of responses that can be received from the Walkingpad.
+/// Defines the types of responses that can be received from the WalkingPad.
 #[derive(Clone, Copy, Eq, PartialEq, PartialOrd)]
 pub enum Response {
     State(State),

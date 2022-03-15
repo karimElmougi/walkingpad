@@ -1,7 +1,7 @@
 /*!
-    Structs and functions for implementing the Walkingpad A1 Pro protocol.
+    Structs and functions for implementing the WalkingPad A1 Pro protocol.
 
-    The Walkingpad communicates over Bluetooth Low Energy, so a library like btleplug may be
+    The WalkingPad communicates over Bluetooth Low Energy, so a library like btleplug may be
     used in conjunction with this one to control and query the pad.
 */
 
@@ -56,7 +56,7 @@ impl fmt::Display for ProtocolError {
 }
 
 /// Represents the speed values used in requests and responses.
-/// The Walkingpad displays speeds in kilometers per second, but stores them internally in
+/// The WalkingPad displays speeds in kilometers per second, but stores them internally in
 /// hectometers (100 meters) per seconds to represent fractional values.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Speed {
@@ -211,7 +211,7 @@ where
     }
 }
 
-/// Defines the subjects which can be queried or set on the Walkingpad.
+/// Defines the subjects which can be queried or set on the WalkingPad.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 enum Subject {
@@ -228,21 +228,21 @@ impl TryFrom<u8> for Subject {
     }
 }
 
-/// Defines the operational modes the Walkingpad can be in.
+/// Defines the operational modes the WalkingPad can be in.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 pub enum Mode {
-    /// In the Automatic mode, the Walkingpad will automatically adjust the belt speed to keep the
+    /// In the Automatic mode, the WalkingPad will automatically adjust the belt speed to keep the
     /// user roughly within the center.
     Auto = 0,
 
-    /// In the Manual mode, the Walkingpad works as expected, with all speed adjustments happening
+    /// In the Manual mode, the WalkingPad works as expected, with all speed adjustments happening
     /// through either the remote or a Bluetooth command.
     Manual = 1,
 
     Sleep = 2,
 
-    /// In the Calibration mode, the Walkingpad simply runs continuously at a speed of 4 km/h.
+    /// In the Calibration mode, the WalkingPad simply runs continuously at a speed of 4 km/h.
     Calibration = 4,
 }
 
@@ -254,7 +254,7 @@ impl TryFrom<u8> for Mode {
     }
 }
 
-/// Defines the sensitivy levels for the Walkingpad's Automatic mode.
+/// Defines the sensitivy levels for the WalkingPad's Automatic mode.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 pub enum Sensitivity {
@@ -271,7 +271,7 @@ impl TryFrom<u8> for Sensitivity {
     }
 }
 
-/// Defines the units of measure used by the display on the Walkingpad.
+/// Defines the units of measure used by the display on the WalkingPad.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 pub enum Units {
@@ -288,7 +288,7 @@ impl TryFrom<u8> for Units {
 }
 
 bitflags! {
-    /// Defines the kinds of statistics the Walkingpad will cycle through on its display.
+    /// Defines the kinds of statistics the WalkingPad will cycle through on its display.
     ///
     /// ```rust
     /// use walkingpad_protocol::Request;

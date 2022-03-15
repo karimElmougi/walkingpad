@@ -2,7 +2,7 @@ use super::*;
 
 const REQUEST_HEADER: u8 = 0xf7;
 
-/// Struct for producing the bytes representing the different requests the Walkingpad accepts.
+/// Struct for producing the bytes representing the different requests the WalkingPad accepts.
 ///
 /// # Examples
 ///
@@ -25,7 +25,7 @@ impl Request {
         Set
     }
 
-    /// Clears all data associated with past runs stored on the Walkingpad.
+    /// Clears all data associated with past runs stored on the WalkingPad.
     pub const fn clear_stats() -> [u8; 6] {
         encode_u8_param(0xaa, Subject::StoredStats, 0)
     }
@@ -43,12 +43,12 @@ impl Request {
 pub struct Get;
 
 impl Get {
-    /// Request for the Walkingpad's current state.
+    /// Request for the WalkingPad's current state.
     pub const fn state(self) -> [u8; 6] {
         encode_u8_param(0, Subject::State, 0)
     }
 
-    /// Request for the Walkingpad's current settings.
+    /// Request for the WalkingPad's current settings.
     pub const fn settings(self) -> [u8; 6] {
         encode_u8_param(0, Subject::Settings, 0)
     }
