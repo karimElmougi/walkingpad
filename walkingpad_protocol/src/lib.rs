@@ -118,7 +118,7 @@ impl_op_ex!(+ |a: &Speed, b: &Speed| -> Speed { ops::Add::add(a, b.inner) });
 
 impl<T> ops::Add<T> for &mut Speed
 where
-    <Self as ops::Deref>::Target: ops::Add<T>,
+    Speed: ops::Add<T>,
 {
     type Output = <Speed as ops::Add<T>>::Output;
 
@@ -169,7 +169,7 @@ impl_op_ex!(-|a: &Speed, b: &Speed| -> Speed { ops::Sub::sub(a, b.inner) });
 
 impl<T> ops::Sub<T> for &mut Speed
 where
-    <Self as ops::Deref>::Target: ops::Sub<T>,
+    Speed: ops::Sub<T>,
 {
     type Output = <Speed as ops::Sub<T>>::Output;
 
