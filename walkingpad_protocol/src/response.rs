@@ -52,7 +52,7 @@ pub struct State {
 }
 
 impl State {
-    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<State> {
+    fn deserialize(reader: &mut impl Iterator<Item = u8>) -> Result<State> {
         Ok(State {
             state: read_u8(reader)?.into(),
             speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
@@ -108,7 +108,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<Settings> {
+    fn deserialize(reader: &mut impl Iterator<Item = u8>) -> Result<Settings> {
         Ok(Settings {
             goal_type: read_u8(reader)?,
             goal: read_u32(reader)?,
@@ -156,7 +156,7 @@ pub struct StoredStats {
 }
 
 impl StoredStats {
-    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<StoredStats> {
+    fn deserialize(reader: &mut impl Iterator<Item = u8>) -> Result<StoredStats> {
         Ok(StoredStats {
             time: read_u32(reader)?,
             start_time: read_u32(reader)?,
@@ -205,16 +205,16 @@ impl Debug for Response {
 }
 
 impl Response {
-    pub fn parse(bytes: &[u8]) -> Result<Response> {
+    pub fn deserialize(bytes: &[u8]) -> Result<Response> {
         let mut it = bytes.iter().copied();
 
         Response::parse_header(&mut it)?;
 
         let subject = read_u8(&mut it)?.try_into()?;
         let response = match subject {
-            Subject::State => State::parse(&mut it)?.into(),
-            Subject::Settings => Settings::parse(&mut it)?.into(),
-            Subject::StoredStats => StoredStats::parse(&mut it)?.into(),
+            Subject::State => State::deserialize(&mut it)?.into(),
+            Subject::Settings => Settings::deserialize(&mut it)?.into(),
+            Subject::StoredStats => StoredStats::deserialize(&mut it)?.into(),
         };
 
         let _crc = read_u8(&mut it)?;

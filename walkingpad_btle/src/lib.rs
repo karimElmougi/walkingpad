@@ -117,7 +117,7 @@ pub async fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
         let mut stream = walkingpad.notifications().await?;
         tokio::spawn(async move {
             while let Some(data) = stream.next().await {
-                match Response::parse(data.value.as_slice()) {
+                match Response::deserialize(data.value.as_slice()) {
                     Ok(response) => {
                         if sender.send(response).is_err() {
                             return;
