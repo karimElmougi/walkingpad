@@ -3,5 +3,6 @@
 members = [
   "walkingpad_protocol",
   "walkingpad_btle",
+  "crabwalk",
 ]
 
