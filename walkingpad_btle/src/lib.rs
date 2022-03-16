@@ -1,4 +1,4 @@
-use walkingpad_protocol::*;
+use walkingpad_protocol::Response;
 
 use std::cell::RefCell;
 use std::fmt;

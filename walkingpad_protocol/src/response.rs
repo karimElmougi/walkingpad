@@ -223,7 +223,7 @@ impl Response {
         if it.next().is_none() {
             Ok(response)
         } else {
-            Err(ProtocolError::BytesAfterFooter)
+            Err(Error::BytesAfterFooter)
         }
     }
 
@@ -234,7 +234,7 @@ impl Response {
 
         (byte == RESPONSE_HEADER)
             .then(|| ())
-            .ok_or(ProtocolError::InvalidResponseHeader(byte))
+            .ok_or(Error::InvalidResponseHeader(byte))
     }
 
     fn parse_footer(reader: &mut impl Iterator<Item = u8>) -> Result<()> {
@@ -242,7 +242,7 @@ impl Response {
 
         (byte == MESSAGE_FOOTER)
             .then(|| ())
-            .ok_or(ProtocolError::InvalidResponseFooter(byte))
+            .ok_or(Error::InvalidResponseFooter(byte))
     }
 }
 
@@ -257,5 +257,5 @@ fn read_u32(reader: &mut impl Iterator<Item = u8>) -> Result<u32> {
 }
 
 fn read_u8(reader: &mut impl Iterator<Item = u8>) -> Result<u8> {
-    reader.next().ok_or(ProtocolError::ResponseTooShort)
+    reader.next().ok_or(Error::ResponseTooShort)
 }

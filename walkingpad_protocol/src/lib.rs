@@ -25,10 +25,10 @@ extern crate impl_ops;
 
 const MESSAGE_FOOTER: u8 = 0xfd;
 
-type Result<T> = core::result::Result<T, ProtocolError>;
+type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Debug)]
-pub enum ProtocolError {
+pub enum Error {
     InvalidSpeed(u8),
     InvalidType(u8, &'static str),
     InvalidResponseHeader(u8),
@@ -37,9 +37,9 @@ pub enum ProtocolError {
     ResponseTooShort,
 }
 
-impl fmt::Display for ProtocolError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use ProtocolError::*;
+        use Error::*;
         match self {
             InvalidSpeed(speed) => write!(
                 f,
@@ -92,7 +92,7 @@ impl Speed {
         if value <= Speed::MAX {
             Ok(Speed { inner: value })
         } else {
-            Err(ProtocolError::InvalidSpeed(value))
+            Err(Error::InvalidSpeed(value))
         }
     }
 
@@ -221,10 +221,10 @@ enum Subject {
 }
 
 impl TryFrom<u8> for Subject {
-    type Error = ProtocolError;
+    type Error = Error;
 
     fn try_from(value: u8) -> Result<Self> {
-        Self::from_repr(value).ok_or(ProtocolError::InvalidType(value, "subject"))
+        Self::from_repr(value).ok_or(Error::InvalidType(value, "subject"))
     }
 }
 
@@ -247,10 +247,10 @@ pub enum Mode {
 }
 
 impl TryFrom<u8> for Mode {
-    type Error = ProtocolError;
+    type Error = Error;
 
     fn try_from(value: u8) -> Result<Self> {
-        Self::from_repr(value).ok_or(ProtocolError::InvalidType(value, "mode"))
+        Self::from_repr(value).ok_or(Error::InvalidType(value, "mode"))
     }
 }
 
@@ -264,10 +264,10 @@ pub enum Sensitivity {
 }
 
 impl TryFrom<u8> for Sensitivity {
-    type Error = ProtocolError;
+    type Error = Error;
 
     fn try_from(value: u8) -> Result<Self> {
-        Self::from_repr(value).ok_or(ProtocolError::InvalidType(value, "sensitivity"))
+        Self::from_repr(value).ok_or(Error::InvalidType(value, "sensitivity"))
     }
 }
 
@@ -280,10 +280,10 @@ pub enum Units {
 }
 
 impl TryFrom<u8> for Units {
-    type Error = ProtocolError;
+    type Error = Error;
 
     fn try_from(value: u8) -> Result<Self> {
-        Self::from_repr(value).ok_or(ProtocolError::InvalidType(value, "units"))
+        Self::from_repr(value).ok_or(Error::InvalidType(value, "units"))
     }
 }
 
@@ -307,10 +307,10 @@ bitflags! {
 }
 
 impl TryFrom<u8> for InfoFlags {
-    type Error = ProtocolError;
+    type Error = Error;
 
     fn try_from(value: u8) -> Result<Self> {
-        Self::from_bits(value).ok_or(ProtocolError::InvalidType(value, "InfoFlags"))
+        Self::from_bits(value).ok_or(Error::InvalidType(value, "InfoFlags"))
     }
 }
 
