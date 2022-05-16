@@ -36,6 +36,8 @@ async fn run() -> walkingpad_btle::Result<()> {
         }
     });
 
+    sender.send(&Request::get().settings()).await?;
+
     loop {
         sender.send(&Request::get().state()).await?;
     }
