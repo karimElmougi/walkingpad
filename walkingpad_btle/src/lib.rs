@@ -68,6 +68,9 @@ pub struct WalkingPadSender {
 
 impl WalkingPadSender {
     pub async fn send(&self, command: &[u8]) -> Result<()> {
+        // We do not need explicit synchronization here because WalkingPadSender is !Sync and does
+        // not implement Clone, so only a single thread can call WalkingPadSender::send() at a
+        // time.
         const MIN_WAIT: Duration = Duration::from_millis(250);
         let time_since_write = self.last_write.borrow().elapsed();
         if time_since_write < MIN_WAIT {
@@ -87,6 +90,12 @@ impl WalkingPadSender {
     }
 }
 
+/// Do not call this more than once.
+///
+/// The WalkingPad does not handle requests that are sent too quickly, so the WalkingPadSender
+/// attempts to pace its requests. Circumventing this by creating multiple pairs of 
+/// WalkingPadSender and WalkingPadReceiver will lead to requests not being sent and responses
+/// possibly being lost.
 pub async fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
     let manager = Manager::new().await?;
     let adapters = manager.adapters().await?;
