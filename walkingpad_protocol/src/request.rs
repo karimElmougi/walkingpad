@@ -1,7 +1,5 @@
 use super::*;
 
-const REQUEST_HEADER: u8 = 0xf7;
-
 /// Struct for producing the bytes representing the different requests the WalkingPad accepts.
 ///
 /// # Examples
@@ -49,8 +47,8 @@ impl Get {
     }
 
     /// Request for the WalkingPad's current settings.
-    pub const fn settings(self) -> [u8; 6] {
-        encode_u8_param(0, Subject::Settings, 0)
+    pub const fn settings(self) -> [u8; 9] {
+        encode_u32_param(0, Subject::Settings, 0)
     }
 
     /// Request for retrieving the stored run stats associated with the most recent run.
@@ -116,18 +114,20 @@ impl Set {
 /// second-to-last position in the array.
 const fn crc<const N: usize>(mut bytes: [u8; N]) -> [u8; N] {
     // Skip header, footer and crc byte
-    let crc_i = N - 2;
+    let crc_index = N - 2;
     let mut i = 1;
 
     let mut crc = 0u8;
-    while i < crc_i {
+    while i < crc_index {
         crc = crc.wrapping_add(bytes[i]);
         i += 1;
     }
 
-    bytes[crc_i] = crc;
+    bytes[crc_index] = crc;
     bytes
 }
+
+const REQUEST_HEADER: u8 = 0xf7;
 
 const fn encode_u8_param(request_type: u8, subject: Subject, param: u8) -> [u8; 6] {
     crc([
