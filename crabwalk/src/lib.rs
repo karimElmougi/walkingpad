@@ -1,3 +1,4 @@
+use walkingpad_protocol::request;
 use walkingpad_protocol::{Mode, Request, Speed};
 
 use std::fmt;
@@ -21,14 +22,14 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-pub fn parse(input: &str) -> Result<Vec<u8>> {
+pub fn parse(input: &str) -> Result<Request> {
     let mut tokens = input.trim().split_whitespace();
 
     match tokens.next() {
         Some("get") => get(&mut tokens),
         Some("set") => set(&mut tokens),
-        Some("start") => Ok(Request::start().into()),
-        Some("stop") => Ok(Request::stop().into()),
+        Some("start") => Ok(request::start()),
+        Some("stop") => Ok(request::stop()),
         Some(cmd) => Err(Error::InvalidArgument(
             cmd.to_string(),
             "command".to_string(),
@@ -37,23 +38,23 @@ pub fn parse(input: &str) -> Result<Vec<u8>> {
     }
 }
 
-fn get<'a>(tokens: &mut impl Iterator<Item = &'a str>) -> Result<Vec<u8>> {
+fn get<'a>(tokens: &mut impl Iterator<Item = &'a str>) -> Result<Request> {
     match tokens.next() {
-        Some("state") => Ok(Request::get().state().into()),
-        Some("settings") => Ok(Request::get().settings().into()),
+        Some("state") => Ok(request::get::state()),
+        Some("settings") => Ok(request::get::settings()),
         Some(_) => Err(Error::MissingArgument),
         None => Err(Error::MissingArgument),
     }
 }
 
-fn set<'a>(tokens: &mut impl Iterator<Item = &'a str>) -> Result<Vec<u8>> {
+fn set<'a>(tokens: &mut impl Iterator<Item = &'a str>) -> Result<Request> {
     match tokens.next() {
-        Some("speed") => Ok(Request::set().speed(parse_speed(tokens)?).into()),
-        Some("max-speed") => Ok(Request::set().max_speed(parse_speed(tokens)?).into()),
-        Some("start-speed") => Ok(Request::set().start_speed(parse_speed(tokens)?).into()),
-        Some("calibration") => Ok(Request::set().calibration_mode(parse_bool(tokens)?).into()),
-        Some("auto-start") => Ok(Request::set().auto_start(parse_bool(tokens)?).into()),
-        Some("mode") => Ok(Request::set().mode(parse_mode(tokens)?).into()),
+        Some("speed") => Ok(request::set::speed(parse_speed(tokens)?)),
+        Some("max-speed") => Ok(request::set::max_speed(parse_speed(tokens)?)),
+        Some("start-speed") => Ok(request::set::start_speed(parse_speed(tokens)?)),
+        Some("calibration") => Ok(request::set::calibration_mode(parse_bool(tokens)?)),
+        Some("auto-start") => Ok(request::set::auto_start(parse_bool(tokens)?)),
+        Some("mode") => Ok(request::set::mode(parse_mode(tokens)?)),
         Some(_) => Err(Error::MissingArgument),
         None => Err(Error::MissingArgument),
     }
@@ -98,7 +99,7 @@ mod tests {
         let input = "set speed 7";
         assert_eq!(
             parse(input).unwrap(),
-            Request::set().speed(Speed::from_hm_per_hour(60))
+            request::set::speed(Speed::from_hm_per_hour(60))
         );
     }
 }

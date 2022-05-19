@@ -1,18 +1,18 @@
-use walkingpad_protocol::Response;
+use walkingpad_protocol::{Request, Response};
 
-use std::cell::RefCell;
 use std::fmt;
 use std::fmt::Display;
-use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
+use std::sync::{mpsc, Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use btleplug::api::bleuuid::uuid_from_u16;
+use btleplug::api::Manager as _;
 use btleplug::api::Peripheral as _;
 use btleplug::api::{Central, ScanFilter, WriteType};
-use btleplug::api::{Characteristic, Manager as _};
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::stream::StreamExt;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -59,32 +59,31 @@ impl WalkingPadReceiver {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WalkingPadSender {
-    walkingpad: Peripheral,
-    write_characteristic: Characteristic,
-    last_write: RefCell<Instant>,
+    inner: UnboundedSender<Request>,
+    last_write: Arc<RwLock<Instant>>,
 }
 
 impl WalkingPadSender {
-    pub async fn send(&self, command: &[u8]) -> Result<()> {
-        // We do not need explicit synchronization here because WalkingPadSender is !Sync and does
-        // not implement Clone, so only a single thread can call WalkingPadSender::send() at a
-        // time.
+    fn new(chan: UnboundedSender<Request>) -> WalkingPadSender {
+        WalkingPadSender {
+            inner: chan,
+            last_write: Arc::new(RwLock::new(Instant::now())),
+        }
+    }
+
+    pub fn send(&self, command: Request) -> Result<()> {
         const MIN_WAIT: Duration = Duration::from_millis(250);
-        let time_since_write = self.last_write.borrow().elapsed();
+
+        let time_since_write = self.last_write.read().unwrap().elapsed();
         if time_since_write < MIN_WAIT {
-            tokio::time::sleep(MIN_WAIT - time_since_write).await;
+            std::thread::sleep(MIN_WAIT - time_since_write);
         }
 
-        self.walkingpad
-            .write(
-                &self.write_characteristic,
-                command,
-                WriteType::WithoutResponse,
-            )
-            .await?;
-        self.last_write.replace(Instant::now());
+        self.inner.send(command).unwrap();
+
+        *self.last_write.write().unwrap() = Instant::now();
 
         Ok(())
     }
@@ -93,7 +92,7 @@ impl WalkingPadSender {
 /// Do not call this more than once.
 ///
 /// The WalkingPad does not handle requests that are sent too quickly, so the WalkingPadSender
-/// attempts to pace its requests. Circumventing this by creating multiple pairs of 
+/// attempts to pace its requests. Circumventing this by creating multiple pairs of
 /// WalkingPadSender and WalkingPadReceiver will lead to requests not being sent and responses
 /// possibly being lost.
 pub async fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
@@ -119,11 +118,14 @@ pub async fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
         .ok_or_else(|| Error::ConnectionError("No read characteristic found".to_string()))?
         .clone();
 
-    let (sender, receiver) = mpsc::channel();
-    {
+    let receiver = {
+        let (sender, receiver) = mpsc::channel();
+
         let walkingpad = walkingpad.clone();
         walkingpad.subscribe(&read_characteristic).await?;
+
         let mut stream = walkingpad.notifications().await?;
+
         tokio::spawn(async move {
             while let Some(data) = stream.next().await {
                 match Response::deserialize(data.value.as_slice()) {
@@ -136,14 +138,43 @@ pub async fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
                 }
             }
         });
-    }
 
-    let sender = WalkingPadSender {
-        walkingpad,
-        write_characteristic,
-        last_write: RefCell::new(Instant::now()),
+        receiver
     };
 
+    let sender = {
+        let (sender, mut receiver) = unbounded_channel::<Request>();
+
+        let walkingpad = walkingpad.clone();
+
+        tokio::spawn(async move {
+            let mut last_write = Instant::now();
+            while let Some(command) = receiver.recv().await {
+                const MIN_WAIT: Duration = Duration::from_millis(250);
+
+                let time_since_write = last_write.elapsed();
+                if time_since_write < MIN_WAIT {
+                    tokio::time::sleep(MIN_WAIT - time_since_write).await;
+                }
+
+                walkingpad
+                    .write(
+                        &write_characteristic,
+                        command.as_bytes(),
+                        WriteType::WithoutResponse,
+                    )
+                    .await?;
+
+                last_write = Instant::now();
+            }
+
+            Result::Ok(())
+        });
+
+        sender
+    };
+
+    let sender = WalkingPadSender::new(sender);
     let receiver = WalkingPadReceiver { inner: receiver };
 
     Ok((sender, receiver))

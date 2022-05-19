@@ -291,10 +291,10 @@ bitflags! {
     /// Defines the kinds of statistics the WalkingPad will cycle through on its display.
     ///
     /// ```rust
-    /// use walkingpad_protocol::Request;
+    /// use walkingpad_protocol::request;
     /// use walkingpad_protocol::InfoFlags;
     ///
-    /// let request = Request::set().display(InfoFlags::TIME | InfoFlags::SPEED);
+    /// let request = request::set::display(InfoFlags::TIME | InfoFlags::SPEED);
     /// ```
     pub struct InfoFlags: u8 {
         const NONE = 0b0;

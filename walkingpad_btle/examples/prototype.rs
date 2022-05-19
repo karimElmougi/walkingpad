@@ -1,6 +1,7 @@
 use walkingpad_btle::{WalkingPadReceiver, WalkingPadSender};
+use walkingpad_protocol::request;
 use walkingpad_protocol::response::StoredStats;
-use walkingpad_protocol::{Mode, Request, Response};
+use walkingpad_protocol::{Mode, Response};
 
 use simplelog::*;
 use tokio::runtime;
@@ -14,40 +15,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     let rt = runtime::Builder::new_multi_thread().enable_time().build()?;
-    rt.block_on(run())?;
+    let (sender, receiver) = rt.block_on(walkingpad_btle::connect())?;
 
-    Ok(())
-}
+    sender.send(request::set::mode(Mode::Manual))?;
 
-async fn run() -> walkingpad_btle::Result<()> {
-    let (sender, receiver) = walkingpad_btle::connect().await?;
-
-    sender.send(&Request::set().mode(Mode::Manual)).await?;
-
-    let stats = fetch_stats(&sender, &receiver).await?;
+    let stats = fetch_stats(&sender, &receiver)?;
     println!("fetched stored stats:");
     for stat in stats {
         println!("    {:?}", stat);
     }
 
-    tokio::spawn(async move {
+    std::thread::spawn(move || {
         while let Some(response) = receiver.recv() {
             println!("{:?}", response);
         }
     });
 
-    sender.send(&Request::get().settings()).await?;
+    sender.send(request::get::settings())?;
 
     loop {
-        sender.send(&Request::get().state()).await?;
+        sender.send(request::get::state())?;
     }
 }
 
-async fn fetch_stats(
+fn fetch_stats(
     sender: &WalkingPadSender,
     receiver: &WalkingPadReceiver,
 ) -> walkingpad_btle::Result<Vec<StoredStats>> {
-    sender.send(&Request::get().latest_stored_stats()).await?;
+    sender.send(request::get::latest_stored_stats())?;
 
     let mut stats = vec![];
     while let Some(response) = receiver.recv() {
@@ -55,9 +50,9 @@ async fn fetch_stats(
             Response::StoredStats(stored_stats) => {
                 stats.push(stored_stats);
                 if let Some(next_id) = stored_stats.next_id {
-                    sender.send(&Request::get().stored_stats(next_id)).await?;
+                    sender.send(request::get::stored_stats(next_id))?;
                 } else {
-                    sender.send(&Request::clear_stats()).await?;
+                    sender.send(request::clear_stats())?;
                     return Ok(stats);
                 }
             }
