@@ -1,14 +1,16 @@
-/// Module for producing the bytes representing the different requests the WalkingPad accepts.
-///
-/// # Examples
-///
-/// ```rust
-/// use walkingpad_protocol::{request, Speed};
-///
-/// let start_command = request::start();
-/// let get_settings = request::get::settings();
-/// let set_speed = request::set::speed(Speed::from_hm_per_hour(25));
-/// ```
+/*!
+    Module for producing the bytes representing the different requests the WalkingPad accepts.
+
+    # Examples
+
+    ```rust
+    use walkingpad_protocol::{request, Speed};
+
+    let start_command = request::start();
+    let get_settings = request::get::settings();
+    let set_speed = request::set::speed(Speed::from_hm_per_hour(25));
+*/
+
 use core::mem::size_of;
 
 use super::*;
@@ -52,7 +54,7 @@ enum RequestVariant {
 
 #[repr(C)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RawRequest<const N: usize> {
+struct RawRequest<const N: usize> {
     header: u8,
     subject: u8,
     request_type: u8,
@@ -91,7 +93,7 @@ impl<const N: usize> RawRequest<N> {
         RawRequest { crc, ..req }
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    fn as_bytes(&self) -> &[u8] {
         let ptr = self as *const RawRequest<N> as *const u8;
         unsafe { core::slice::from_raw_parts(ptr, size_of::<Self>()) }
     }
