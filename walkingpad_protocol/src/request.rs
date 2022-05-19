@@ -1,158 +1,153 @@
-use super::*;
-
-/// Struct for producing the bytes representing the different requests the WalkingPad accepts.
+/// Module for producing the bytes representing the different requests the WalkingPad accepts.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use walkingpad_protocol::{Request, Speed};
+/// use walkingpad_protocol::{request, Speed};
 ///
-/// let start_command = Request::start();
-/// let get_settings = Request::get().settings();
-/// let set_speed = Request::set().speed(Speed::from_hm_per_hour(25));
+/// let start_command = request::start();
+/// let get_settings = request::get::settings();
+/// let set_speed = request::set::speed(Speed::from_hm_per_hour(25));
 /// ```
-#[derive(Copy, Clone, Default, Debug, Eq, PartialEq, PartialOrd)]
-pub struct Request;
+use num_traits::PrimInt;
 
-impl Request {
-    pub const fn get() -> Get {
-        Get
-    }
+use core::mem::size_of;
 
-    pub const fn set() -> Set {
-        Set
-    }
-
-    /// Clears all data associated with past runs stored on the WalkingPad.
-    pub const fn clear_stats() -> [u8; 6] {
-        encode_u8_param(0xaa, Subject::StoredStats, 0)
-    }
-
-    pub const fn start() -> [u8; 6] {
-        encode_u8_param(4, Subject::State, true as u8)
-    }
-
-    pub const fn stop() -> [u8; 6] {
-        encode_u8_param(4, Subject::State, false as u8)
-    }
-}
-
-#[derive(Copy, Clone, Default, Debug, Eq, PartialEq, PartialOrd)]
-pub struct Get;
-
-impl Get {
-    /// Request for the WalkingPad's current state.
-    pub const fn state(self) -> [u8; 6] {
-        encode_u8_param(0, Subject::State, 0)
-    }
-
-    /// Request for the WalkingPad's current settings.
-    pub const fn settings(self) -> [u8; 9] {
-        encode_u32_param(0, Subject::Settings, 0)
-    }
-
-    /// Request for retrieving the stored run stats associated with the most recent run.
-    pub const fn latest_stored_stats(self) -> [u8; 6] {
-        const LATEST_STATS: u8 = 255;
-        encode_u8_param(0xaa, Subject::StoredStats, LATEST_STATS)
-    }
-
-    /// Request for retrieving the stored run stats associated with a specific ID.
-    pub const fn stored_stats(self, id: u8) -> [u8; 6] {
-        encode_u8_param(0xaa, Subject::StoredStats, id)
-    }
-}
-
-#[derive(Copy, Clone, Default, Debug, Eq, PartialEq, PartialOrd)]
-pub struct Set;
-
-impl Set {
-    pub const fn speed(self, speed: Speed) -> [u8; 6] {
-        encode_u8_param(1, Subject::State, speed.hm_per_hour())
-    }
-
-    pub const fn mode(self, mode: Mode) -> [u8; 6] {
-        encode_u8_param(2, Subject::State, mode as u8)
-    }
-
-    pub const fn calibration_mode(self, enabled: bool) -> [u8; 9] {
-        encode_u32_param(2, Subject::Settings, enabled as u32)
-    }
-
-    pub const fn max_speed(self, speed: Speed) -> [u8; 9] {
-        encode_u32_param(3, Subject::Settings, speed.hm_per_hour() as u32)
-    }
-
-    pub const fn start_speed(self, speed: Speed) -> [u8; 9] {
-        encode_u32_param(4, Subject::Settings, speed.hm_per_hour() as u32)
-    }
-
-    pub const fn auto_start(self, enabled: bool) -> [u8; 9] {
-        encode_u32_param(5, Subject::Settings, enabled as u32)
-    }
-
-    pub const fn sensitivity(self, sensitivity: Sensitivity) -> [u8; 9] {
-        encode_u32_param(6, Subject::Settings, sensitivity as u32)
-    }
-
-    pub const fn display(self, flags: InfoFlags) -> [u8; 9] {
-        encode_u32_param(7, Subject::Settings, flags.bits() as u32)
-    }
-
-    pub const fn units(self, units: Units) -> [u8; 9] {
-        encode_u32_param(8, Subject::Settings, units as u32)
-    }
-
-    pub const fn locked(self, is_locked: bool) -> [u8; 9] {
-        encode_u32_param(9, Subject::Settings, is_locked as u32)
-    }
-}
-
-/// Computes the simplistic CRC checksum scheme of the message's contents.
-///
-/// The checksum excludes the header and footer values, and is placed in the
-/// second-to-last position in the array.
-const fn crc<const N: usize>(mut bytes: [u8; N]) -> [u8; N] {
-    // Skip header, footer and crc byte
-    let crc_index = N - 2;
-    let mut i = 1;
-
-    let mut crc = 0u8;
-    while i < crc_index {
-        crc = crc.wrapping_add(bytes[i]);
-        i += 1;
-    }
-
-    bytes[crc_index] = crc;
-    bytes
-}
+use super::*;
 
 const REQUEST_HEADER: u8 = 0xf7;
 
-const fn encode_u8_param(request_type: u8, subject: Subject, param: u8) -> [u8; 6] {
-    crc([
-        REQUEST_HEADER,
-        subject as u8,
-        request_type,
-        param,
-        0,
-        MESSAGE_FOOTER,
-    ])
+#[repr(C)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Req<T> {
+    header: u8,
+    subject: u8,
+    request_type: u8,
+    param: T,
+    crc: u8,
+    footer: u8,
 }
 
-const fn encode_u32_param(request_type: u8, subject: Subject, param: u32) -> [u8; 9] {
-    let param = param.to_be_bytes();
-    crc([
-        REQUEST_HEADER,
-        subject as u8,
-        request_type,
-        param[0],
-        param[1],
-        param[2],
-        param[3],
-        0,
-        MESSAGE_FOOTER,
-    ])
+impl<T: PrimInt> Req<T> {
+    fn new(request_type: u8, subject: Subject, param: T) -> Req<T> {
+        let base_size = size_of::<Req<()>>();
+
+        assert_eq!(base_size, 5);
+        assert_eq!(size_of::<Req<T>>(), base_size + size_of::<T>());
+
+        let param = param.to_be();
+        let mut req = Req {
+            header: REQUEST_HEADER,
+            subject: subject as u8,
+            request_type,
+            param,
+            crc: 0,
+            footer: MESSAGE_FOOTER,
+        };
+
+        unsafe {
+            let mut crc = 0u8;
+
+            let ptr = &req as *const Req<T> as *const u8;
+            let mut begin = ptr.add(1);
+            let end = begin.add(2).add(size_of::<T>());
+
+            while begin < end {
+                crc = crc.wrapping_add(*begin);
+                begin = begin.add(1);
+            }
+
+            req.crc = crc;
+        }
+
+        req
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        let ptr = self as *const Req<T> as *const u8;
+        unsafe { core::slice::from_raw_parts(ptr, size_of::<Req<T>>()) }
+    }
+}
+
+/// Clears all data associated with past runs stored on the WalkingPad.
+pub fn cleat_stats() -> Req<u8> {
+    Req::new(0xaa, Subject::StoredStats, 0)
+}
+
+pub fn start() -> Req<u8> {
+    Req::new(4, Subject::State, true as u8)
+}
+
+pub fn stop() -> Req<u8> {
+    Req::new(4, Subject::State, false as u8)
+}
+
+pub mod get {
+    use super::*;
+
+    pub fn state() -> Req<u8> {
+        Req::new(0, Subject::State, 0)
+    }
+
+    /// Request for the WalkingPad's current settings.
+    pub fn settings() -> Req<u32> {
+        Req::new(0, Subject::Settings, 0)
+    }
+
+    /// Request for retrieving the stored run stats associated with the most recent run.
+    pub fn latest_stored_stats() -> Req<u8> {
+        const LATEST_STATS: u8 = 255;
+        Req::new(0xaa, Subject::StoredStats, LATEST_STATS)
+    }
+
+    /// Request for retrieving the stored run stats associated with a specific ID.
+    pub fn stored_stats(id: u8) -> Req<u8> {
+        Req::new(0xaa, Subject::StoredStats, id)
+    }
+}
+
+pub mod set {
+    use super::*;
+
+    pub fn speed(speed: Speed) -> Req<u8> {
+        Req::new(1, Subject::State, speed.hm_per_hour())
+    }
+
+    pub fn mode(mode: Mode) -> Req<u8> {
+        Req::new(2, Subject::State, mode as u8)
+    }
+
+    pub fn calibration_mode(enabled: bool) -> Req<u32> {
+        Req::new(2, Subject::Settings, enabled as u32)
+    }
+
+    pub fn max_speed(speed: Speed) -> Req<u32> {
+        Req::new(3, Subject::Settings, speed.hm_per_hour() as u32)
+    }
+
+    pub fn start_speed(speed: Speed) -> Req<u32> {
+        Req::new(4, Subject::Settings, speed.hm_per_hour() as u32)
+    }
+
+    pub fn auto_start(enabled: bool) -> Req<u32> {
+        Req::new(5, Subject::Settings, enabled as u32)
+    }
+
+    pub fn sensitivity(sensitivity: Sensitivity) -> Req<u32> {
+        Req::new(6, Subject::Settings, sensitivity as u32)
+    }
+
+    pub fn display(flags: InfoFlags) -> Req<u32> {
+        Req::new(7, Subject::Settings, flags.bits() as u32)
+    }
+
+    pub fn units(units: Units) -> Req<u32> {
+        Req::new(8, Subject::Settings, units as u32)
+    }
+
+    pub fn locked(is_locked: bool) -> Req<u32> {
+        Req::new(9, Subject::Settings, is_locked as u32)
+    }
 }
 
 #[cfg(test)]
@@ -162,8 +157,8 @@ mod test {
     #[test]
     fn test() {
         assert_eq!(
-            encode_u8_param(8, Subject::State, 1),
-            [
+            Req::new(8, Subject::State, 1u8).as_bytes(),
+            &[
                 REQUEST_HEADER,
                 Subject::State as u8,
                 8,
@@ -173,8 +168,8 @@ mod test {
             ]
         );
         assert_eq!(
-            encode_u32_param(8, Subject::State, u32::from_be_bytes([1, 2, 3, 4])),
-            [
+            Req::new(8, Subject::State, u32::from_be_bytes([1, 2, 3, 4])).as_bytes(),
+            &[
                 REQUEST_HEADER,
                 Subject::State as u8,
                 8,
