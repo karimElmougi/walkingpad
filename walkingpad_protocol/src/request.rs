@@ -11,13 +11,14 @@
     let set_speed = request::set::speed(Speed::from_hm_per_hour(25));
 */
 
+use core::fmt::Debug;
 use core::mem::size_of;
 
 use super::*;
 
 const REQUEST_HEADER: u8 = 0xf7;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Request(RequestVariant);
 
 impl Request {
@@ -46,14 +47,47 @@ impl Request {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl Debug for Request {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Request")
+            .field("subject", &self.0.subject())
+            .field("request_type", &self.0.request_type())
+            .field("param", &self.0.param())
+            .finish()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
 enum RequestVariant {
     U8(RawRequest<1>),
     U32(RawRequest<4>),
 }
 
+impl RequestVariant {
+    fn subject(&self) -> Subject {
+        match self {
+            RequestVariant::U8(r) => r.subject.try_into().unwrap(),
+            RequestVariant::U32(r) => r.subject.try_into().unwrap(),
+        }
+    }
+
+    fn request_type(&self) -> u8 {
+        match self {
+            RequestVariant::U8(r) => r.request_type,
+            RequestVariant::U32(r) => r.request_type,
+        }
+    }
+
+    fn param(&self) -> u32 {
+        match self {
+            RequestVariant::U8(r) => r.param[0] as u32,
+            RequestVariant::U32(r) => u32::from_be_bytes(r.param),
+        }
+    }
+}
+
 #[repr(C)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct RawRequest<const N: usize> {
     header: u8,
     subject: u8,
@@ -115,23 +149,23 @@ pub fn stop() -> Request {
 pub mod get {
     use super::*;
 
-    pub fn state() -> Request {
+    pub const fn state() -> Request {
         Request::from_u8(0, Subject::State, 0u8)
     }
 
     /// Request for the WalkingPad's current settings.
-    pub fn settings() -> Request {
+    pub const fn settings() -> Request {
         Request::from_u32(0, Subject::Settings, 0u32)
     }
 
     /// Request for retrieving the stored run stats associated with the most recent run.
-    pub fn latest_stored_stats() -> Request {
+    pub const fn latest_stored_stats() -> Request {
         const LATEST_STATS: u8 = 255;
         Request::from_u8(0xaa, Subject::StoredStats, LATEST_STATS)
     }
 
     /// Request for retrieving the stored run stats associated with a specific ID.
-    pub fn stored_stats(id: u8) -> Request {
+    pub const fn stored_stats(id: u8) -> Request {
         Request::from_u8(0xaa, Subject::StoredStats, id)
     }
 }
@@ -139,43 +173,43 @@ pub mod get {
 pub mod set {
     use super::*;
 
-    pub fn speed(speed: Speed) -> Request {
+    pub const fn speed(speed: Speed) -> Request {
         Request::from_u8(1, Subject::State, speed.hm_per_hour())
     }
 
-    pub fn mode(mode: Mode) -> Request {
+    pub const fn mode(mode: Mode) -> Request {
         Request::from_u8(2, Subject::State, mode as u8)
     }
 
-    pub fn calibration_mode(enabled: bool) -> Request {
+    pub const fn calibration_mode(enabled: bool) -> Request {
         Request::from_u32(2, Subject::Settings, enabled as u32)
     }
 
-    pub fn max_speed(speed: Speed) -> Request {
+    pub const fn max_speed(speed: Speed) -> Request {
         Request::from_u32(3, Subject::Settings, speed.hm_per_hour() as u32)
     }
 
-    pub fn start_speed(speed: Speed) -> Request {
+    pub const fn start_speed(speed: Speed) -> Request {
         Request::from_u32(4, Subject::Settings, speed.hm_per_hour() as u32)
     }
 
-    pub fn auto_start(enabled: bool) -> Request {
+    pub const fn auto_start(enabled: bool) -> Request {
         Request::from_u32(5, Subject::Settings, enabled as u32)
     }
 
-    pub fn sensitivity(sensitivity: Sensitivity) -> Request {
+    pub const fn sensitivity(sensitivity: Sensitivity) -> Request {
         Request::from_u32(6, Subject::Settings, sensitivity as u32)
     }
 
-    pub fn display(flags: InfoFlags) -> Request {
+    pub const fn display(flags: InfoFlags) -> Request {
         Request::from_u32(7, Subject::Settings, flags.bits() as u32)
     }
 
-    pub fn units(units: Units) -> Request {
+    pub const fn units(units: Units) -> Request {
         Request::from_u32(8, Subject::Settings, units as u32)
     }
 
-    pub fn locked(is_locked: bool) -> Request {
+    pub const fn locked(is_locked: bool) -> Request {
         Request::from_u32(9, Subject::Settings, is_locked as u32)
     }
 }

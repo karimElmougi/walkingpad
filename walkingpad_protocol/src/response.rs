@@ -137,7 +137,7 @@ impl Settings {
 pub struct StoredStats {
     /// The current time on the WalkingPad's internal clock.
     /// It only tick while the belt is running and starts at 0 on first boot.
-    pub time: u32,
+    pub current_time: u32,
 
     /// The start time of this run on the internal clock.
     pub start_time: u32,
@@ -158,7 +158,7 @@ pub struct StoredStats {
 impl StoredStats {
     fn deserialize(reader: &mut impl Iterator<Item = u8>) -> Result<StoredStats> {
         Ok(StoredStats {
-            time: read_u32(reader)?,
+            current_time: read_u32(reader)?,
             start_time: read_u32(reader)?,
             duration: read_u32(reader)?,
             distance: read_u32(reader)?,
