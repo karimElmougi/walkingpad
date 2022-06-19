@@ -26,7 +26,7 @@ impl From<u8> for MotorState {
 }
 
 /// Reprents the current state of the WalkingPad.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct State {
     /// The state of the motor.
     pub state: MotorState,
@@ -38,13 +38,13 @@ pub struct State {
     pub mode: Mode,
 
     /// The current time on the WalkingPad's internal clock.
-    pub time: u32,
+    pub current_time: u32,
 
     /// The distance currently traveled.
     pub distance: u32,
 
     /// The number of steps counted so far.
-    pub steps: u32,
+    pub nb_steps: u32,
 
     /// Bytes whose meaning is undetermined.
     /// The third byte appears to correspond to button presses from the remote.
@@ -57,9 +57,9 @@ impl State {
             state: read_u8(reader)?.into(),
             speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
             mode: read_u8(reader)?.try_into()?,
-            time: read_u32(reader)?,
+            current_time: read_u32(reader)?,
             distance: read_u32(reader)?,
-            steps: read_u32(reader)?,
+            nb_steps: read_u32(reader)?,
             unknown: [
                 read_u8(reader)?,
                 read_u8(reader)?,
@@ -71,7 +71,7 @@ impl State {
 }
 
 /// Represents the settings stored on the WalkingPad.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Settings {
     /// The significance of this field is unclear.
     pub goal_type: u8, // TODO: What even is this?
@@ -133,7 +133,7 @@ impl Settings {
 /// Represents the records of statistics of past runs stored on the device.
 /// These records effectively form a linked list through the `next_id` field, with the id 255
 /// representing the latest record.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct StoredStats {
     /// The current time on the WalkingPad's internal clock.
     /// It only tick while the belt is running and starts at 0 on first boot.
@@ -168,8 +168,72 @@ impl StoredStats {
     }
 }
 
+#[cfg(feature = "std")]
+impl StoredStats {
+    pub fn start_time(&self) -> std::time::SystemTime {
+        let elapsed = (self.current_time - self.start_time) as u64;
+        let elapsed = std::time::Duration::from_secs(elapsed);
+        std::time::SystemTime::now() - elapsed
+    }
+
+    pub fn pretty_print(self, units: Units) -> PrettyPrintStoredStats {
+        PrettyPrintStoredStats {
+            units,
+            stored_stats: self,
+        }
+    }
+}
+
+impl StoredStats {
+    pub fn distance(&self, units: Units) -> measurements::Length {
+        match units {
+            Units::Metric => measurements::Length::from_decimeters(self.distance as f64),
+            Units::Imperial => measurements::Length::from_miles(self.distance as f64),
+        }
+    }
+
+    pub fn duration(&self) -> core::time::Duration {
+        core::time::Duration::from_secs(self.duration as u64)
+    }
+}
+
+#[cfg(feature = "std")]
+pub struct PrettyPrintStoredStats {
+    units: Units,
+    stored_stats: StoredStats,
+}
+
+#[cfg(feature = "std")]
+impl std::fmt::Display for PrettyPrintStoredStats {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let start_time = time::OffsetDateTime::from(self.stored_stats.start_time())
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
+
+        struct D(measurements::Length);
+
+        impl Debug for D {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                if self.0.as_kilometers() < 1.0 {
+                    write!(f, "{}m", self.0.as_meters())
+                } else {
+                    write!(f, "{}km", self.0.as_kilometers())
+                }
+            }
+        }
+
+        f.debug_struct("StoredStats")
+            .field("start_time", &start_time)
+            .field("duration", &self.stored_stats.duration())
+            .field("distance", &D(self.stored_stats.distance(self.units)))
+            .field("nb_steps", &self.stored_stats.nb_steps)
+            .field("next_id", &self.stored_stats.next_id)
+            .finish()
+    }
+}
+
 /// Defines the types of responses that can be received from the WalkingPad.
-#[derive(Clone, Copy, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, PartialOrd)]
 pub enum Response {
     State(State),
     Settings(Settings),
@@ -199,7 +263,7 @@ impl Debug for Response {
         match self {
             Response::State(inner) => inner.fmt(f),
             Response::Settings(inner) => inner.fmt(f),
-            Response::StoredStats(inner) => inner.fmt(f),
+            Response::StoredStats(inner) => Debug::fmt(inner, f),
         }
     }
 }

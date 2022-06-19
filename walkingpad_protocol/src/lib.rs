@@ -7,6 +7,9 @@
 
 #![no_std]
 
+#[cfg(feature = "std")]
+extern crate std;
+
 pub mod request;
 pub mod response;
 
@@ -56,8 +59,8 @@ impl fmt::Display for Error {
 }
 
 /// Represents the speed values used in requests and responses.
-/// The WalkingPad displays speeds in kilometers per second, but stores them internally in
-/// hectometers (100 meters) per seconds to represent fractional values.
+/// The WalkingPad displays speeds in kilometers per hour, but stores them internally in
+/// hectometers (100 meters) per hour to represent fractional values.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Speed {
     inner: u8,
