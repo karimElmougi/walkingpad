@@ -1,10 +1,11 @@
+use std::sync::mpsc::RecvTimeoutError;
+use std::time::Duration;
+
 use walkingpad_btle::{WalkingPadReceiver, WalkingPadSender};
 use walkingpad_protocol::request;
-use walkingpad_protocol::response::StoredStats;
 use walkingpad_protocol::{Mode, Response};
 
 use simplelog::*;
-use tokio::runtime;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     TermLogger::init(
@@ -14,20 +15,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ColorChoice::Auto,
     )?;
 
-    let rt = runtime::Builder::new_multi_thread().enable_time().build()?;
-    let (sender, receiver) = rt.block_on(walkingpad_btle::connect())?;
+    let (sender, receiver) = walkingpad_btle::connect()?;
 
     sender.send(request::set::mode(Mode::Manual))?;
 
-    let stats = fetch_stats(&sender, &receiver)?;
-    println!("fetched stored stats:");
-    for stat in stats {
-        println!("    {:?}", stat);
-    }
+    fetch_stats(&sender, &receiver)?;
 
     std::thread::spawn(move || {
-        while let Some(response) = receiver.recv() {
-            println!("{:?}", response);
+        while let Ok(response) = receiver.recv() {
+            log::info!("{:?}", response);
         }
     });
 
@@ -41,27 +37,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn fetch_stats(
     sender: &WalkingPadSender,
     receiver: &WalkingPadReceiver,
-) -> walkingpad_btle::Result<Vec<StoredStats>> {
+) -> walkingpad_btle::Result<()> {
     sender.send(request::get::latest_stored_stats())?;
 
-    let mut stats = vec![];
-    while let Some(response) = receiver.recv() {
-        match response {
-            Response::StoredStats(stored_stats) => {
-                stats.push(stored_stats);
-                if let Some(next_id) = stored_stats.next_id {
-                    sender.send(request::get::stored_stats(next_id))?;
-                } else {
-                    sender.send(request::clear_stats())?;
-                    return Ok(stats);
+    loop {
+        match receiver.recv_timeout(Duration::from_secs(2)) {
+            Ok(response) => match response {
+                Response::StoredStats(stored_stats) => {
+                    log::info!("fetched {:?}", stored_stats);
+
+                    if let Some(next_id) = stored_stats.next_id {
+                        sender.send(request::get::stored_stats(next_id))?;
+                    } else {
+                        sender.send(request::clear_stats())?;
+                        return Ok(());
+                    }
                 }
+                other => {
+                    log::warn!("Other response received while fetching stats: {:?}", other);
+                }
+            },
+            Err(RecvTimeoutError::Timeout) => {
+                log::warn!("recv() timed out, trying again");
+                sender.send(request::get::latest_stored_stats())?;
             }
-            other => {
-                log::warn!("Other response received while fetching stats: {:?}", other);
-                continue;
+            Err(_) => {
+                return Err(walkingpad_btle::Error::ConnectionClosed);
             }
         }
     }
-
-    Ok(stats)
 }

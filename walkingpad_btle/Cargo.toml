@@ -13,4 +13,5 @@ futures = "*"
 tokio = { version = "*", features = ["rt", "rt-multi-thread", "sync"]}
 uuid = "*"
 log = "0.4"
+once_cell = "1.1"
 

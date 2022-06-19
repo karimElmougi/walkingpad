@@ -1,18 +1,19 @@
+use futures::Stream;
+use once_cell::sync::OnceCell;
 use walkingpad_protocol::{Request, Response};
 
 use std::fmt;
 use std::fmt::Display;
-use std::sync::mpsc::Receiver;
-use std::sync::{mpsc, Arc, RwLock};
+use std::pin::Pin;
 use std::time::{Duration, Instant};
 
 use btleplug::api::bleuuid::uuid_from_u16;
-use btleplug::api::Manager as _;
 use btleplug::api::Peripheral as _;
 use btleplug::api::{Central, ScanFilter, WriteType};
+use btleplug::api::{Manager as _, ValueNotification};
 use btleplug::platform::{Adapter, Manager, Peripheral};
+use futures::future;
 use futures::stream::StreamExt;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -20,6 +21,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     ConnectionError(String),
+    ConnectionClosed,
+    ConnectionAlreadyEstablished,
     NoAdapters,
 }
 
@@ -29,6 +32,8 @@ impl Display for Error {
 
         match self {
             ConnectionError(inner) => write!(f, "Error connecting to the WalkingPad: {}", inner),
+            ConnectionClosed => write!(f, "Connection was closed"),
+            ConnectionAlreadyEstablished => write!(f, "Connection was already established"),
             NoAdapters => write!(f, "No bluetooth adapters found"),
         }
     }
@@ -42,60 +47,121 @@ impl From<btleplug::Error> for Error {
     }
 }
 
-const SERVICE_UUID: Uuid = uuid_from_u16(0xfe00);
-
-const READ_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xfe01);
-
-const WRITE_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xfe02);
-
-#[derive(Debug)]
-pub struct WalkingPadReceiver {
-    inner: Receiver<Response>,
-}
-
-impl WalkingPadReceiver {
-    pub fn recv(&self) -> Option<Response> {
-        self.inner.recv().ok()
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::ConnectionError(format!("{}", err))
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct WalkingPadSender {
-    inner: UnboundedSender<Request>,
-    last_write: Arc<RwLock<Instant>>,
+impl From<std::sync::mpsc::SendError<Request>> for Error {
+    fn from(_: std::sync::mpsc::SendError<Request>) -> Self {
+        Error::ConnectionClosed
+    }
 }
 
-impl WalkingPadSender {
-    fn new(chan: UnboundedSender<Request>) -> WalkingPadSender {
-        WalkingPadSender {
-            inner: chan,
-            last_write: Arc::new(RwLock::new(Instant::now())),
+pub type WalkingPadReceiver = std::sync::mpsc::Receiver<Response>;
+
+pub type WalkingPadSender = std::sync::mpsc::SyncSender<Request>;
+
+static CONNECTION_FLAG: OnceCell<()> = OnceCell::new();
+
+pub fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
+    if CONNECTION_FLAG.get().is_some() {
+        return Err(Error::ConnectionAlreadyEstablished);
+    }
+
+    let (receiver_in, receiver_out) = std::sync::mpsc::channel();
+    let (sender_in, sender_out) = std::sync::mpsc::sync_channel::<Request>(10);
+    let (init_in, init_out) = tokio::sync::oneshot::channel::<Result<()>>();
+
+    let _t = std::thread::spawn(move || {
+        macro_rules! unwrap_or_return {
+            ( $e:expr ) => {
+                match $e {
+                    Ok(x) => x,
+                    Err(err) => {
+                        init_in.send(Err(err.into())).unwrap();
+                        return;
+                    }
+                }
+            };
         }
-    }
 
-    pub fn send(&self, command: Request) -> Result<()> {
-        const MIN_WAIT: Duration = Duration::from_millis(250);
+        let rt = unwrap_or_return!(tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build());
 
-        let time_since_write = self.last_write.read().unwrap().elapsed();
-        if time_since_write < MIN_WAIT {
-            std::thread::sleep(MIN_WAIT - time_since_write);
-        }
+        let walkingpad = unwrap_or_return!(rt.block_on(init_walkingpad()));
 
-        self.inner.send(command).unwrap();
+        let mut notification_stream =
+            unwrap_or_return!(rt.block_on(notification_stream(walkingpad.clone())));
 
-        *self.last_write.write().unwrap() = Instant::now();
+        let write_characteristic = {
+            let characteristics = walkingpad.characteristics();
 
-        Ok(())
-    }
+            const WRITE_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xfe02);
+
+            unwrap_or_return!(characteristics
+                .iter()
+                .find(|c| c.uuid == WRITE_CHARACTERISTIC_UUID)
+                .ok_or_else(|| Error::ConnectionError("No write characteristic found".to_string())))
+            .clone()
+        };
+
+        let sender = async move {
+            let mut last_write = Instant::now();
+
+            while let Ok(command) = async { sender_out.recv() }.await {
+                const MIN_WAIT: Duration = Duration::from_millis(500);
+
+                let time_since_write = last_write.elapsed();
+                if time_since_write < MIN_WAIT {
+                    tokio::time::sleep(MIN_WAIT - time_since_write).await;
+                }
+
+                let result = walkingpad
+                    .write(
+                        &write_characteristic,
+                        command.as_bytes(),
+                        WriteType::WithoutResponse,
+                    )
+                    .await;
+
+                if let Err(err) = result {
+                    log::error!("WalkingPad write failed: {}", err);
+                    break;
+                }
+
+                last_write = Instant::now();
+            }
+        };
+
+        let receiver = async move {
+            while let Some(data) = notification_stream.next().await {
+                match Response::deserialize(data.value.as_slice()) {
+                    Ok(response) => {
+                        if receiver_in.send(response).is_err() {
+                            break;
+                        }
+                    }
+                    Err(err) => log::error!("malformed response: {}: `{:?}`", err, data),
+                }
+            }
+        };
+
+        init_in.send(Ok(())).unwrap();
+
+        rt.block_on(async { future::join(sender, receiver).await });
+    });
+
+    init_out.blocking_recv().unwrap()?;
+
+    CONNECTION_FLAG.set(()).unwrap();
+
+    Ok((sender_in, receiver_out))
 }
 
-/// Do not call this more than once.
-///
-/// The WalkingPad does not handle requests that are sent too quickly, so the WalkingPadSender
-/// attempts to pace its requests. Circumventing this by creating multiple pairs of
-/// WalkingPadSender and WalkingPadReceiver will lead to requests not being sent and responses
-/// possibly being lost.
-pub async fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
+async fn init_walkingpad() -> Result<Peripheral> {
     let manager = Manager::new().await?;
     let adapters = manager.adapters().await?;
     let main_adapter = adapters.first().ok_or(Error::NoAdapters)?;
@@ -104,83 +170,30 @@ pub async fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
     walkingpad.connect().await?;
     walkingpad.discover_services().await?;
 
+    Ok(walkingpad)
+}
+
+type NotificationStream = Pin<Box<dyn Stream<Item = ValueNotification> + Send>>;
+
+async fn notification_stream(walkingpad: Peripheral) -> Result<NotificationStream> {
     let characteristics = walkingpad.characteristics();
 
-    let write_characteristic = characteristics
-        .iter()
-        .find(|c| c.uuid == WRITE_CHARACTERISTIC_UUID)
-        .ok_or_else(|| Error::ConnectionError("No write characteristic found".to_string()))?
-        .clone();
+    const READ_CHARACTERISTIC_UUID: Uuid = uuid_from_u16(0xfe01);
 
     let read_characteristic = characteristics
         .iter()
         .find(|c| c.uuid == READ_CHARACTERISTIC_UUID)
-        .ok_or_else(|| Error::ConnectionError("No read characteristic found".to_string()))?
-        .clone();
+        .ok_or_else(|| Error::ConnectionError("No read characteristic found".to_string()))?;
 
-    let receiver = {
-        let (sender, receiver) = mpsc::channel();
+    walkingpad.subscribe(read_characteristic).await?;
 
-        let walkingpad = walkingpad.clone();
-        walkingpad.subscribe(&read_characteristic).await?;
+    let stream = walkingpad.notifications().await?;
 
-        let mut stream = walkingpad.notifications().await?;
-
-        tokio::spawn(async move {
-            while let Some(data) = stream.next().await {
-                match Response::deserialize(data.value.as_slice()) {
-                    Ok(response) => {
-                        if sender.send(response).is_err() {
-                            return;
-                        }
-                    }
-                    Err(err) => log::error!("malformed response: {}: `{:?}`", err, data),
-                }
-            }
-        });
-
-        receiver
-    };
-
-    let sender = {
-        let (sender, mut receiver) = unbounded_channel::<Request>();
-
-        let walkingpad = walkingpad.clone();
-
-        tokio::spawn(async move {
-            let mut last_write = Instant::now();
-            while let Some(command) = receiver.recv().await {
-                const MIN_WAIT: Duration = Duration::from_millis(250);
-
-                let time_since_write = last_write.elapsed();
-                if time_since_write < MIN_WAIT {
-                    tokio::time::sleep(MIN_WAIT - time_since_write).await;
-                }
-
-                walkingpad
-                    .write(
-                        &write_characteristic,
-                        command.as_bytes(),
-                        WriteType::WithoutResponse,
-                    )
-                    .await?;
-
-                last_write = Instant::now();
-            }
-
-            Result::Ok(())
-        });
-
-        sender
-    };
-
-    let sender = WalkingPadSender::new(sender);
-    let receiver = WalkingPadReceiver { inner: receiver };
-
-    Ok((sender, receiver))
+    Ok(stream)
 }
 
 async fn discover_walkingpad(adapter: &Adapter) -> Result<Peripheral> {
+    const SERVICE_UUID: Uuid = uuid_from_u16(0xfe00);
     let filter = ScanFilter {
         services: vec![SERVICE_UUID],
     };
