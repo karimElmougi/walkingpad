@@ -1,7 +1,7 @@
 use futures::Stream;
 use once_cell::sync::OnceCell;
 use walkingpad_protocol::request;
-use walkingpad_protocol::response::{raw, StoredStats};
+use walkingpad_protocol::response::StoredStats;
 use walkingpad_protocol::{Request, Response};
 
 use std::fmt;
@@ -185,9 +185,9 @@ pub fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
 
         let receiver = async move {
             while let Some(data) = notification_stream.next().await {
-                match raw::Response::parse(data.value.as_slice()) {
+                match Response::parse(data.value.as_slice()) {
                     Ok(response) => {
-                        if receiver_in.send(response.into()).is_err() {
+                        if receiver_in.send(response).is_err() {
                             break;
                         }
                     }
