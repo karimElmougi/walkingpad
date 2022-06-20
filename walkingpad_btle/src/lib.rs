@@ -1,7 +1,7 @@
 use futures::Stream;
 use once_cell::sync::OnceCell;
-use walkingpad_protocol::{Request, Response};
 use walkingpad_protocol::response::raw;
+use walkingpad_protocol::{Request, Response};
 
 use std::fmt;
 use std::fmt::Display;

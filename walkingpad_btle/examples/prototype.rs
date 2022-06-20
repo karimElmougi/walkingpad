@@ -2,7 +2,7 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
 use walkingpad_btle::{WalkingPadReceiver, WalkingPadSender};
-use walkingpad_protocol::request;
+use walkingpad_protocol::{request, Units};
 use walkingpad_protocol::{Mode, Response};
 
 use simplelog::*;
@@ -18,12 +18,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (sender, receiver) = walkingpad_btle::connect()?;
 
     sender.send(request::set::mode(Mode::Manual))?;
+    sender.send(request::set::units(Units::Metric))?;
 
     fetch_stats(&sender, &receiver)?;
 
     std::thread::spawn(move || {
         while let Ok(response) = receiver.recv() {
-            log::info!("{:?}", response);
+            log::info!("{}", response);
         }
     });
 
@@ -31,6 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         sender.send(request::get::state())?;
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
 
@@ -44,9 +46,11 @@ fn fetch_stats(
         match receiver.recv_timeout(Duration::from_secs(2)) {
             Ok(response) => match response {
                 Response::StoredStats(stored_stats) => {
-                    log::info!("fetched {:?}", stored_stats);
+                    let next_id = stored_stats.next_id;
 
-                    if let Some(next_id) = stored_stats.next_id {
+                    log::info!("fetched {}", stored_stats);
+
+                    if let Some(next_id) = next_id {
                         sender.send(request::get::stored_stats(next_id))?;
                     } else {
                         sender.send(request::clear_stats())?;

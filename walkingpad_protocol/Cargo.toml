@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-std = ["dep:time", "measurements/std"]
+std = ["dep:time", "dep:serde", "dep:parse_duration", "measurements/std"]
 
 [dependencies]
 bitflags = "^1.3"
 strum = "0.24"
 strum_macros = "0.24"
 impl_ops = "0.1"
-time = { version = "0.3", features = ["std", "formatting"], optional = true }
 measurements = "0.11"
+time = { version = "0.3", features = ["std", "formatting", "parsing"], optional = true }
+serde = {version = "1", default-features = false, features = ["derive"], optional = true }
+parse_duration = {version = "2", optional = true}

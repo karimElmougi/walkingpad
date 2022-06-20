@@ -8,6 +8,7 @@ use measurements::Distance;
 
 /// Defines the state the WalkingPad's motor can be in.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
 pub enum MotorState {
     Stopped,
     Running,
@@ -30,6 +31,7 @@ impl From<u8> for MotorState {
 
 /// Reprents the current state of the WalkingPad.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
 pub struct State {
     /// The state of the motor.
     pub motor_state: MotorState,
@@ -41,6 +43,7 @@ pub struct State {
     pub mode: Mode,
 
     /// The distance currently traveled.
+    #[serde(with = "serde_distance")]
     pub distance: Distance,
 
     /// The number of steps counted so far.
@@ -73,6 +76,7 @@ impl From<raw::State> for State {
 
 /// Represents the settings stored on the WalkingPad.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
 pub struct Settings {
     /// The maxmimum speed the WalkingPad can be set to.
     pub max_speed: Speed,
@@ -124,25 +128,32 @@ pub use raw::StoredStats;
 
 /// Represents the statistics of a past run stored on the device.
 #[cfg(feature = "std")]
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize)]
 pub struct StoredStats {
     /// The start time of the run.
+    #[serde(with = "serde_time")]
     pub start_time: std::time::SystemTime,
 
     /// The duration of the run.
-    pub duration: Duration,
+    #[serde(with = "serde_duration")]
+    pub duration: std::time::Duration,
 
     /// The distance traveled during the run, in decimeters (10 meters).
+    #[serde(with = "serde_distance")]
     pub distance: Distance,
 
     /// The number of steps recorded during the run.
     pub nb_steps: u32,
+
+    #[serde(skip)]
+    /// The id of the next record.
+    pub next_id: Option<u8>,
 }
 
 #[cfg(feature = "std")]
 impl Display for StoredStats {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let start_time = time::OffsetDateTime::from(self.start_time())
+        let start_time = time::OffsetDateTime::from(self.start_time)
             .format(&time::format_description::well_known::Rfc3339)
             .unwrap();
 
@@ -167,6 +178,7 @@ impl From<raw::StoredStats> for StoredStats {
             duration: raw.duration(),
             distance: raw.distance(),
             nb_steps: raw.nb_steps,
+            next_id: raw.next_id,
         }
     }
 }
@@ -248,5 +260,78 @@ impl Display for Response {
             #[cfg(not(feature = "std"))]
             Response::StoredStats(inner) => Debug::fmt(inner, f),
         }
+    }
+}
+
+#[cfg(feature = "std")]
+mod serde_distance {
+    use measurements::Distance;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(distance: &Distance, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u32(distance.as_meters() as u32)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Distance, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let distance: u32 = Deserialize::deserialize(deserializer)?;
+        Ok(Distance::from_meters(distance as f64))
+    }
+}
+
+#[cfg(feature = "std")]
+mod serde_time {
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serializer};
+    use time::format_description::well_known::Rfc3339;
+    use time::OffsetDateTime;
+
+    use std::time::SystemTime;
+
+    pub fn serialize<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let time = time::OffsetDateTime::from(*time).format(&Rfc3339).unwrap();
+
+        serializer.serialize_str(&time)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let date_time: &str = Deserialize::deserialize(deserializer)?;
+        OffsetDateTime::parse(date_time, &Rfc3339)
+            .map(SystemTime::from)
+            .map_err(D::Error::custom)
+    }
+}
+
+#[cfg(feature = "std")]
+mod serde_duration {
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    use std::time::Duration;
+
+    pub fn serialize<S>(dur: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&std::format!("{:?}", dur))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let dur: &str = Deserialize::deserialize(deserializer)?;
+        parse_duration::parse(dur).map_err(D::Error::custom)
     }
 }
