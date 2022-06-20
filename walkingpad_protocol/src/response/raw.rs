@@ -1,31 +1,7 @@
 use super::*;
 
-pub mod raw;
-
 use core::convert::TryInto;
-use core::fmt::{Debug, Display, Formatter};
-
-/// Defines the state the WalkingPad's motor can be in.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
-pub enum MotorState {
-    Stopped,
-    Running,
-    Starting,
-    Unknown(u8),
-}
-
-impl From<u8> for MotorState {
-    fn from(value: u8) -> Self {
-        use MotorState::*;
-
-        match value {
-            0b0000 => Stopped,
-            0b0001 => Running,
-            0b1001 => Starting,
-            _ => Unknown(value),
-        }
-    }
-}
+use core::fmt::{Debug, Formatter};
 
 /// Reprents the current state of the WalkingPad.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
@@ -73,19 +49,6 @@ impl State {
 
     pub fn distance(&self) -> measurements::Distance {
         measurements::Distance::from_meters((self.distance * 10) as f64)
-    }
-}
-
-impl Display for State {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "State {{ ")?;
-        write!(f, "state: {:?}, ", self.state)?;
-        write!(f, "speed: {}, ", self.speed)?;
-        write!(f, "mode: {:?}, ", self.mode)?;
-        write!(f, "current_time: {}, ", self.current_time)?;
-        write!(f, "distance: {}, ", self.distance())?;
-        write!(f, "nb_steps: {} ", self.nb_steps)?;
-        write!(f, "}}")
     }
 }
 
@@ -149,18 +112,6 @@ impl Settings {
     }
 }
 
-impl Display for Settings {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Settings {{ ")?;
-        write!(f, "max_speed: {}, ", self.max_speed)?;
-        write!(f, "start_speed: {}, ", self.start_speed)?;
-        write!(f, "sensitivity: {:?}, ", self.sensitivity)?;
-        write!(f, "display: {:?}, ", self.display)?;
-        write!(f, "is_locked: {}, ", self.is_locked)?;
-        write!(f, "units: {:?} ", self.units)?;
-        write!(f, "}}")
-    }
-}
 /// Represents the records of statistics of past runs stored on the device.
 /// These records effectively form a linked list through the `next_id` field, with the id 255
 /// representing the latest record.
@@ -214,30 +165,6 @@ impl StoredStats {
     }
 }
 
-impl Display for StoredStats {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "StoredStats {{ ")?;
-
-
-        #[cfg(feature = "std")]
-        {
-            let start_time = time::OffsetDateTime::from(self.start_time())
-                .format(&time::format_description::well_known::Rfc3339)
-                .unwrap();
-            write!(f, "start_time: {}, ", start_time)?;
-        }
-
-        #[cfg(not(feature = "std"))]
-        write!(f, "start_time: {}, ", self.start_time)?;
-
-        write!(f, "duration: {:?}, ", self.duration())?;
-        write!(f, "distance: {}, ", self.distance())?;
-        write!(f, "nb_steps: {:?}, ", self.nb_steps)?;
-        write!(f, "next_id: {:?}, ", self.next_id)?;
-        write!(f, "}}")
-    }
-}
-
 /// Defines the types of responses that can be received from the WalkingPad.
 #[derive(Clone, Eq, PartialEq, PartialOrd)]
 pub enum Response {
@@ -270,16 +197,6 @@ impl Debug for Response {
             Response::State(inner) => Debug::fmt(inner, f),
             Response::Settings(inner) => Debug::fmt(inner, f),
             Response::StoredStats(inner) => Debug::fmt(inner, f),
-        }
-    }
-}
-
-impl Display for Response {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Response::State(inner) => Display::fmt(inner, f),
-            Response::Settings(inner) => Display::fmt(inner, f),
-            Response::StoredStats(inner) => Display::fmt(inner, f),
         }
     }
 }
