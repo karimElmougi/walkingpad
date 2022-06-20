@@ -4,7 +4,7 @@ use core::fmt::{Debug, Display, Formatter};
 use core::time::Duration;
 
 use uom::fmt::DisplayStyle;
-use uom::si::length::meter;
+use uom::si::length::{decameter, meter};
 use uom::si::u32::Length as Distance;
 
 /// Defines the state the WalkingPad's motor can be in.
@@ -65,7 +65,7 @@ impl State {
             speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
             mode: read_u8(reader)?.try_into()?,
             run_time: read_u32(reader)?,
-            distance: to_distance(read_u32(reader)?),
+            distance: Distance::new::<decameter>(read_u32(reader)?),
             nb_steps: read_u32(reader)?,
             unknown: [
                 read_u8(reader)?,
@@ -209,7 +209,7 @@ impl StoredStats {
             current_time: read_u32(reader)?,
             start_time: read_u32(reader)?,
             duration: Duration::from_secs(read_u32(reader)?.into()),
-            distance: to_distance(read_u32(reader)?),
+            distance: Distance::new::<decameter>(read_u32(reader)?),
             nb_steps: read_u32(reader)?,
             next_id: read_u8(reader).map(|n| if n == 0 { None } else { Some(n) })?,
         })
@@ -331,12 +331,6 @@ fn read_u32(reader: &mut impl Iterator<Item = u8>) -> Result<u32> {
 
 fn read_u8(reader: &mut impl Iterator<Item = u8>) -> Result<u8> {
     reader.next().ok_or(Error::ResponseTooShort)
-}
-
-fn to_distance(distance: u32) -> Distance {
-    use uom::si::length::decameter;
-
-    Distance::new::<decameter>(distance)
 }
 
 #[cfg(feature = "serde")]
