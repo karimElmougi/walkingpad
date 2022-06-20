@@ -66,29 +66,41 @@ pub fn gather_run_statistics(
     sender: &WalkingPadSender,
     receiver: &WalkingPadReceiver,
 ) -> (Vec<StoredStats>, Option<Error>) {
+    let (mut stats, err) = gather_run_statistics_impl(sender, receiver);
+    stats.sort_by_key(|s| s.start_time);
+    stats.dedup_by_key(|s| s.start_time);
+
+    (stats, err)
+}
+
+fn gather_run_statistics_impl(
+    sender: &WalkingPadSender,
+    receiver: &WalkingPadReceiver,
+) -> (Vec<StoredStats>, Option<Error>) {
     let mut stats = vec![];
 
-    if let Err(err) = sender.send(request::get::latest_stored_stats()) {
-        return (stats, Some(err.into()));
-    }
-
     loop {
+        if let Err(err) = sender.send(request::get::latest_stored_stats()) {
+            return (stats, Some(err.into()));
+        }
+
         let response = match receiver.recv_timeout(Duration::from_secs(1)) {
             Ok(r) => r,
             Err(RecvTimeoutError::Timeout) => {
-                if let Err(err) = sender.send(request::get::latest_stored_stats()) {
-                    return (stats, Some(err.into()));
-                }
+                log::warn!("recv() timeout");
                 continue;
             }
-            Err(_) => {
-                return (stats, Some(Error::ConnectionClosed));
-            }
+            Err(_) => return (stats, Some(Error::ConnectionClosed)),
         };
 
         if let Response::StoredStats(s) = response {
+            if s.start_time == 0 && s.duration.is_zero() {
+                return (stats, None);
+            }
+
             let next_id = s.next_id;
             stats.push(s);
+
             match next_id {
                 Some(next_id) => {
                     if let Err(err) = sender.send(request::get::stored_stats(next_id)) {
@@ -159,7 +171,7 @@ pub fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
             let mut last_write = Instant::now();
 
             while let Ok(command) = async { sender_out.recv() }.await {
-                const MIN_WAIT: Duration = Duration::from_millis(500);
+                const MIN_WAIT: Duration = Duration::from_millis(300);
 
                 let time_since_write = last_write.elapsed();
                 if time_since_write < MIN_WAIT {

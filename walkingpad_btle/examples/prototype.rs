@@ -25,15 +25,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .append(true)
         .open("stats.json")?;
 
-    let (mut stats, err) = walkingpad_btle::gather_run_statistics(&sender, &receiver);
-    stats.sort_by(|a, b| a.start_time.cmp(&b.start_time));
+    let (stats, err) = walkingpad_btle::gather_run_statistics(&sender, &receiver);
     for stats in stats {
         if let Err(err) = serde_json::to_string(&stats).map(|s| writeln!(out, "{}", s)) {
             log::error!("unable to save stored statistics: {}", err);
         }
     }
-
-    drop(out);
 
     if let Some(err) = err {
         return Err(err.into());
