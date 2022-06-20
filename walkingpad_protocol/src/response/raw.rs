@@ -120,10 +120,13 @@ impl Settings {
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct StoredStats {
     /// The current time on the WalkingPad's internal clock.
-    /// It only tick while the belt is running and starts at 0 on first boot.
+    /// It only ticks while the belt is running and starts at 0 on first boot.
+    /// Seems essentially useless as a result.
     pub current_time: u32,
 
     /// The start time of this run on the internal clock.
+    /// Suffers from a similar issue to [current_time], unclear good this is for other than for
+    /// sorting.
     pub start_time: u32,
 
     /// The duration of the run.

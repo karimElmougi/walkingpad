@@ -1,6 +1,7 @@
 use super::*;
 
-/// Responses kept mostly as-is from the WalkpingPad.
+/// Responses kept mostly as-is from the WalkpingPad, as opposed to the cleaned
+/// up versions found in the rest of the [response] module.
 pub mod raw;
 
 use core::fmt::{Debug, Display, Formatter};
@@ -9,7 +10,7 @@ use measurements::Distance;
 
 /// Defines the state the WalkingPad's motor can be in.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum MotorState {
     Stopped,
     Running,
@@ -32,7 +33,7 @@ impl From<u8> for MotorState {
 
 /// Reprents the current state of the WalkingPad.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct State {
     /// The state of the motor.
     pub motor_state: MotorState,
@@ -44,11 +45,11 @@ pub struct State {
     pub mode: Mode,
 
     /// The distance currently traveled.
-    #[cfg_attr(feature = "std", serde(with = "serde_distance"))]
+    #[cfg_attr(feature = "serde", serde(with = "serde_distance"))]
     pub distance: Distance,
 
-    /// The current time on the WalkingPad's internal clock.
-    pub current_time: u32,
+    /// Time in seconds of the current run on the WalkingPad's internal clock.
+    pub run_time: u32,
 
     /// The number of steps counted so far.
     pub nb_steps: u32,
@@ -61,7 +62,7 @@ impl Display for State {
         write!(f, "speed: {}, ", self.speed)?;
         write!(f, "mode: {:?}, ", self.mode)?;
         write!(f, "distance: {}, ", self.distance)?;
-        write!(f, "current_time: {}, ", self.current_time)?;
+        write!(f, "current_time: {}, ", self.run_time)?;
         write!(f, "nb_steps: {} ", self.nb_steps)?;
         write!(f, "}}")
     }
@@ -74,7 +75,7 @@ impl From<raw::State> for State {
             speed: raw.speed,
             mode: raw.mode,
             distance: raw.distance(),
-            current_time: raw.current_time,
+            run_time: raw.current_time,
             nb_steps: raw.nb_steps,
         }
     }
@@ -82,7 +83,7 @@ impl From<raw::State> for State {
 
 /// Represents the settings stored on the WalkingPad.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Settings {
     /// The maxmimum speed the WalkingPad can be set to.
     pub max_speed: Speed,
@@ -129,42 +130,29 @@ impl From<raw::Settings> for Settings {
     }
 }
 
-#[cfg(not(feature = "std"))]
-pub use raw::StoredStats;
-
 /// Represents the statistics of a past run stored on the device.
-#[cfg(feature = "std")]
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StoredStats {
-    /// The start time of the run.
-    #[serde(with = "serde_time")]
-    pub start_time: std::time::SystemTime,
-
     /// The duration of the run.
-    #[serde(with = "serde_duration")]
-    pub duration: std::time::Duration,
+    #[cfg_attr(feature = "serde", serde(with = "serde_duration"))]
+    pub duration: core::time::Duration,
 
     /// The distance traveled during the run, in decimeters (10 meters).
-    #[serde(with = "serde_distance")]
+    #[cfg_attr(feature = "serde", serde(with = "serde_distance"))]
     pub distance: Distance,
 
     /// The number of steps recorded during the run.
     pub nb_steps: u32,
 
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     /// The id of the next record.
     pub next_id: Option<u8>,
 }
 
-#[cfg(feature = "std")]
 impl Display for StoredStats {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let start_time = time::OffsetDateTime::from(self.start_time)
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap();
-
         write!(f, "StoredStats {{ ")?;
-        write!(f, "start_time: {}, ", start_time)?;
         write!(f, "duration: {:?}, ", self.duration)?;
         write!(f, "distance: {}, ", self.distance)?;
         write!(f, "nb_steps: {:?}, ", self.nb_steps)?;
@@ -172,15 +160,9 @@ impl Display for StoredStats {
     }
 }
 
-#[cfg(feature = "std")]
 impl From<raw::StoredStats> for StoredStats {
     fn from(raw: raw::StoredStats) -> StoredStats {
-        let elapsed = raw.current_time as u64 - raw.start_time as u64;
-        let elapsed = std::time::Duration::from_secs(elapsed);
-        let start_time = std::time::SystemTime::now() - elapsed;
-
         StoredStats {
-            start_time,
             duration: raw.duration(),
             distance: raw.distance(),
             nb_steps: raw.nb_steps,
@@ -227,7 +209,6 @@ impl From<raw::Settings> for Response {
     }
 }
 
-#[cfg(feature = "std")]
 impl From<raw::StoredStats> for Response {
     fn from(stored_stats: raw::StoredStats) -> Self {
         Response::StoredStats(stored_stats.into())
@@ -259,17 +240,12 @@ impl Display for Response {
         match self {
             Response::State(inner) => Display::fmt(inner, f),
             Response::Settings(inner) => Display::fmt(inner, f),
-
-            #[cfg(feature = "std")]
             Response::StoredStats(inner) => Display::fmt(inner, f),
-
-            #[cfg(not(feature = "std"))]
-            Response::StoredStats(inner) => Debug::fmt(inner, f),
         }
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "serde")]
 mod serde_distance {
     use measurements::Distance;
     use serde::{Deserialize, Deserializer, Serializer};
@@ -290,66 +266,45 @@ mod serde_distance {
     }
 }
 
-#[cfg(feature = "std")]
-mod serde_time {
-    use serde::de::Error;
-    use serde::{Deserialize, Deserializer, Serializer};
-    use time::format_description::well_known::Rfc3339;
-    use time::OffsetDateTime;
-
-    use std::time::SystemTime;
-
-    pub fn serialize<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let time = time::OffsetDateTime::from(*time).format(&Rfc3339).unwrap();
-
-        serializer.serialize_str(&time)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let date_time: &str = Deserialize::deserialize(deserializer)?;
-        OffsetDateTime::parse(date_time, &Rfc3339)
-            .map(SystemTime::from)
-            .map_err(D::Error::custom)
-    }
-}
-
-#[cfg(feature = "std")]
+#[cfg(feature = "serde")]
 mod serde_duration {
-    use serde::de::Error;
+    use arrayvec::ArrayString;
+    use serde::{de, ser};
     use serde::{Deserialize, Deserializer, Serializer};
 
-    use std::time::Duration;
+    use core::fmt::Write;
+    use core::time::Duration;
 
     pub fn serialize<S>(dur: &Duration, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
+        use ser::Error;
+
         const MINUTE: Duration = Duration::from_secs(60);
         const HOUR: Duration = Duration::from_secs(60 * 60);
-        
+
+        let mut buffer = ArrayString::<64>::new();
         if dur > &HOUR {
             let hours = dur.as_secs() / HOUR.as_secs();
             let minutes = (dur.as_secs() % HOUR.as_secs()) / 60;
-            serializer.serialize_str(&std::format!("{}h{}m", hours, minutes))
+
+            core::write!(buffer, "{}h{}m", hours, minutes).map_err(S::Error::custom)?;
+        } else if dur > &MINUTE {
+            core::write!(buffer, "{}m", dur.as_secs() / 60).map_err(S::Error::custom)?;
+        } else {
+            core::write!(buffer, "{}s", dur.as_secs()).map_err(S::Error::custom)?;
         }
-        else if dur > &MINUTE {
-            serializer.serialize_str(&std::format!("{}m", dur.as_secs() / 60))
-        }
-        else {
-            serializer.serialize_str(&std::format!("{}s", dur.as_secs()))
-        }
+
+        serializer.serialize_str(buffer.as_str())
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
     where
         D: Deserializer<'de>,
     {
+        use de::Error;
+
         let dur: &str = Deserialize::deserialize(deserializer)?;
         parse_duration::parse(dur).map_err(D::Error::custom)
     }

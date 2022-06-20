@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::io::Write;
 
-use walkingpad_protocol::{request, Units};
 use walkingpad_protocol::Mode;
+use walkingpad_protocol::{request, Units};
 
 use simplelog::*;
 
@@ -19,7 +19,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     sender.send(request::set::mode(Mode::Manual))?;
     sender.send(request::set::units(Units::Metric))?;
 
-    let mut out = File::options().create(true).write(true).append(true).open("stats.json")?;
+    let mut out = File::options()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open("stats.json")?;
 
     let (mut stats, err) = walkingpad_btle::gather_run_statistics(&sender, &receiver);
     stats.sort_by(|a, b| a.start_time.cmp(&b.start_time));

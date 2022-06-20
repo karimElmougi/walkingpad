@@ -7,7 +7,7 @@ edition = "2021"
 simplelog = "0.11"
 
 [dependencies]
-walkingpad_protocol = { path = "../walkingpad_protocol", features = ["std"] }
+walkingpad_protocol = { path = "../walkingpad_protocol", features = ["std", "serde"] }
 btleplug = "0.9"
 futures = "*"
 tokio = { version = "*", features = ["rt", "rt-multi-thread", "sync"]}

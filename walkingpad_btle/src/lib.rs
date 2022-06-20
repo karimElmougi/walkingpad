@@ -64,7 +64,7 @@ impl From<std::sync::mpsc::SendError<Request>> for Error {
 
 pub fn gather_run_statistics(
     sender: &WalkingPadSender,
-    receiver: &WalkingPadReceiver
+    receiver: &WalkingPadReceiver,
 ) -> (Vec<StoredStats>, Option<Error>) {
     let mut stats = vec![];
 

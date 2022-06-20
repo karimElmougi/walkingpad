@@ -7,9 +7,6 @@
 
 #![no_std]
 
-#[cfg(feature = "std")]
-extern crate std;
-
 pub mod request;
 pub mod response;
 
@@ -63,7 +60,7 @@ impl fmt::Display for Error {
 /// The WalkingPad displays speeds in kilometers per hour, but stores them internally in
 /// hectometers (100 meters) per hour to represent fractional values.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Speed(u8);
 
 impl Speed {
@@ -232,7 +229,7 @@ impl TryFrom<u8> for Subject {
 }
 
 /// Defines the operational modes the WalkingPad can be in.
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
 pub enum Mode {
@@ -261,7 +258,7 @@ impl TryFrom<u8> for Mode {
 /// Defines the sensitivy levels for the WalkingPad's Automatic mode.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Sensitivity {
     High = 1,
     Medium = 2,
@@ -279,7 +276,7 @@ impl TryFrom<u8> for Sensitivity {
 /// Defines the units of measure used by the display on the WalkingPad.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, FromRepr)]
-#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Units {
     Metric = 0,
     Imperial = 1,
@@ -302,7 +299,7 @@ bitflags! {
     ///
     /// let request = request::set::display(InfoFlags::TIME | InfoFlags::SPEED);
     /// ```
-    #[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct InfoFlags: u8 {
         const NONE = 0b0;
         const TIME = 0b1;
