@@ -1,11 +1,13 @@
 use futures::Stream;
 use once_cell::sync::OnceCell;
-use walkingpad_protocol::response::raw;
+use walkingpad_protocol::request;
+use walkingpad_protocol::response::{raw, StoredStats};
 use walkingpad_protocol::{Request, Response};
 
 use std::fmt;
 use std::fmt::Display;
 use std::pin::Pin;
+use std::sync::mpsc::RecvTimeoutError;
 use std::time::{Duration, Instant};
 
 use btleplug::api::bleuuid::uuid_from_u16;
@@ -57,6 +59,50 @@ impl From<std::io::Error> for Error {
 impl From<std::sync::mpsc::SendError<Request>> for Error {
     fn from(_: std::sync::mpsc::SendError<Request>) -> Self {
         Error::ConnectionClosed
+    }
+}
+
+pub fn gather_run_statistics(
+    sender: &WalkingPadSender,
+    receiver: &WalkingPadReceiver
+) -> (Vec<StoredStats>, Option<Error>) {
+    let mut stats = vec![];
+
+    if let Err(err) = sender.send(request::get::latest_stored_stats()) {
+        return (stats, Some(err.into()));
+    }
+
+    loop {
+        let response = match receiver.recv_timeout(Duration::from_secs(1)) {
+            Ok(r) => r,
+            Err(RecvTimeoutError::Timeout) => {
+                if let Err(err) = sender.send(request::get::latest_stored_stats()) {
+                    return (stats, Some(err.into()));
+                }
+                continue;
+            }
+            Err(_) => {
+                return (stats, Some(Error::ConnectionClosed));
+            }
+        };
+
+        if let Response::StoredStats(s) = response {
+            let next_id = s.next_id;
+            stats.push(s);
+            match next_id {
+                Some(next_id) => {
+                    if let Err(err) = sender.send(request::get::stored_stats(next_id)) {
+                        return (stats, Some(err.into()));
+                    }
+                }
+                None => {
+                    if let Err(err) = sender.send(request::clear_stats()) {
+                        return (stats, Some(err.into()));
+                    }
+                    return (stats, None);
+                }
+            }
+        }
     }
 }
 

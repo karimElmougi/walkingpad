@@ -1,5 +1,6 @@
 use super::*;
 
+/// Responses kept mostly as-is from the WalkpingPad.
 pub mod raw;
 
 use core::fmt::{Debug, Display, Formatter};
@@ -43,8 +44,11 @@ pub struct State {
     pub mode: Mode,
 
     /// The distance currently traveled.
-    #[serde(with = "serde_distance")]
+    #[cfg_attr(feature = "std", serde(with = "serde_distance"))]
     pub distance: Distance,
+
+    /// The current time on the WalkingPad's internal clock.
+    pub current_time: u32,
 
     /// The number of steps counted so far.
     pub nb_steps: u32,
@@ -57,6 +61,7 @@ impl Display for State {
         write!(f, "speed: {}, ", self.speed)?;
         write!(f, "mode: {:?}, ", self.mode)?;
         write!(f, "distance: {}, ", self.distance)?;
+        write!(f, "current_time: {}, ", self.current_time)?;
         write!(f, "nb_steps: {} ", self.nb_steps)?;
         write!(f, "}}")
     }
@@ -69,6 +74,7 @@ impl From<raw::State> for State {
             speed: raw.speed,
             mode: raw.mode,
             distance: raw.distance(),
+            current_time: raw.current_time,
             nb_steps: raw.nb_steps,
         }
     }
@@ -169,7 +175,7 @@ impl Display for StoredStats {
 #[cfg(feature = "std")]
 impl From<raw::StoredStats> for StoredStats {
     fn from(raw: raw::StoredStats) -> StoredStats {
-        let elapsed = (raw.current_time - raw.start_time) as u64;
+        let elapsed = raw.current_time as u64 - raw.start_time as u64;
         let elapsed = std::time::Duration::from_secs(elapsed);
         let start_time = std::time::SystemTime::now() - elapsed;
 
@@ -324,7 +330,20 @@ mod serde_duration {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&std::format!("{:?}", dur))
+        const MINUTE: Duration = Duration::from_secs(60);
+        const HOUR: Duration = Duration::from_secs(60 * 60);
+        
+        if dur > &HOUR {
+            let hours = dur.as_secs() / HOUR.as_secs();
+            let minutes = (dur.as_secs() % HOUR.as_secs()) / 60;
+            serializer.serialize_str(&std::format!("{}h{}m", hours, minutes))
+        }
+        else if dur > &MINUTE {
+            serializer.serialize_str(&std::format!("{}m", dur.as_secs() / 60))
+        }
+        else {
+            serializer.serialize_str(&std::format!("{}s", dur.as_secs()))
+        }
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
