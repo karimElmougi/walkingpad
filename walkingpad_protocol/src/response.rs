@@ -3,10 +3,6 @@ use super::*;
 use core::fmt::{Debug, Display, Formatter};
 use core::time::Duration;
 
-use uom::fmt::DisplayStyle;
-use uom::si::length::{decameter, meter};
-use uom::si::u32::Length as Distance;
-
 /// Defines the state the WalkingPad's motor can be in.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -46,8 +42,8 @@ pub struct State {
     /// Time in seconds of the current run on the WalkingPad's internal clock.
     pub run_time: u32,
 
-    /// The distance traveled during the current run.
-    pub distance: Distance,
+    /// The distance traveled during the current run, in decameters (10m).
+    pub distance: u32,
 
     /// The number of steps counted so far.
     pub nb_steps: u32,
@@ -65,7 +61,7 @@ impl State {
             speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
             mode: read_u8(reader)?.try_into()?,
             run_time: read_u32(reader)?,
-            distance: Distance::new::<decameter>(read_u32(reader)?),
+            distance: read_u32(reader)?,
             nb_steps: read_u32(reader)?,
             unknown: [
                 read_u8(reader)?,
@@ -75,19 +71,19 @@ impl State {
             ],
         })
     }
+
+    pub fn distance_as_meters(&self) -> u32 {
+        self.distance * 10
+    }
 }
 
 impl Display for State {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let distance = self
-            .distance
-            .into_format_args(meter, DisplayStyle::Abbreviation);
-
         write!(f, "State {{ ")?;
         write!(f, "motor_state: {:?}, ", self.motor_state)?;
         write!(f, "speed: {}, ", self.speed)?;
         write!(f, "mode: {:?}, ", self.mode)?;
-        write!(f, "distance: {}, ", distance)?;
+        write!(f, "distance: {}m, ", self.distance_as_meters())?;
         write!(f, "run_time: {}, ", self.run_time)?;
         write!(f, "nb_steps: {} ", self.nb_steps)?;
         write!(f, "}}")
@@ -192,8 +188,8 @@ pub struct StoredStats {
     #[cfg_attr(feature = "serde", serde(with = "serde_duration"))]
     pub duration: Duration,
 
-    /// The distance traveled during the run.
-    pub distance: Distance,
+    /// The distance traveled during the run, in decameters (10m).
+    pub distance: u32,
 
     /// The number of steps recorded during the run.
     pub nb_steps: u32,
@@ -209,23 +205,23 @@ impl StoredStats {
             current_time: read_u32(reader)?,
             start_time: read_u32(reader)?,
             duration: Duration::from_secs(read_u32(reader)?.into()),
-            distance: Distance::new::<decameter>(read_u32(reader)?),
+            distance: read_u32(reader)?,
             nb_steps: read_u32(reader)?,
             next_id: read_u8(reader).map(|n| if n == 0 { None } else { Some(n) })?,
         })
+    }
+
+    pub fn distance_as_meters(&self) -> u32 {
+        self.distance * 10
     }
 }
 
 impl Display for StoredStats {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let distance = self
-            .distance
-            .into_format_args(meter, DisplayStyle::Abbreviation);
-
         write!(f, "StoredStats {{ ")?;
         write!(f, "start_time: {}, ", self.start_time)?;
         write!(f, "duration: {:?}, ", self.duration)?;
-        write!(f, "distance: {}, ", distance)?;
+        write!(f, "distance: {}m, ", self.distance_as_meters())?;
         write!(f, "nb_steps: {:?}, ", self.nb_steps)?;
         write!(f, "}}")
     }
