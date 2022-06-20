@@ -18,6 +18,7 @@ pub use response::Response;
 
 use core::convert::TryFrom;
 use core::fmt;
+use core::fmt::Display;
 use core::ops;
 
 use bitflags::bitflags;
@@ -62,9 +63,7 @@ impl fmt::Display for Error {
 /// The WalkingPad displays speeds in kilometers per hour, but stores them internally in
 /// hectometers (100 meters) per hour to represent fractional values.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
-pub struct Speed {
-    inner: u8,
-}
+pub struct Speed(u8);
 
 impl Speed {
     const MAX: u8 = 60;
@@ -73,9 +72,7 @@ impl Speed {
     pub const fn from_km_per_hour(value: u8) -> Speed {
         match Speed::try_from_km_per_hour(value) {
             Ok(speed) => speed,
-            Err(_) => Speed {
-                inner: Speed::MAX / 10,
-            },
+            Err(_) => Speed (Speed::MAX / 10),
         }
     }
 
@@ -87,20 +84,20 @@ impl Speed {
     pub const fn from_hm_per_hour(value: u8) -> Speed {
         match Speed::try_from_hm_per_hour(value) {
             Ok(speed) => speed,
-            Err(_) => Speed { inner: Speed::MAX },
+            Err(_) => Speed(value),
         }
     }
 
     pub const fn try_from_hm_per_hour(value: u8) -> Result<Speed> {
         if value <= Speed::MAX {
-            Ok(Speed { inner: value })
+            Ok(Speed(value))
         } else {
             Err(Error::InvalidSpeed(value))
         }
     }
 
     pub const fn hm_per_hour(self) -> u8 {
-        self.inner
+        self.0
     }
 
     /// Does an integer division of the inner hectometer value.
@@ -112,12 +109,18 @@ impl Speed {
 impl Default for Speed {
     fn default() -> Self {
         // This is the default speed when the device is first turned on from the factory.
-        Self { inner: 20 }
+        Self(20)
     }
 }
 
-impl_op_ex!(+ |a: &Speed, b: &u8| -> Speed { Speed::from_hm_per_hour(a.inner + b) });
-impl_op_ex!(+ |a: &Speed, b: &Speed| -> Speed { ops::Add::add(a, b.inner) });
+impl Display for Speed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:.2} km/h", self.0 as f64 / 10.0)
+    }
+}
+
+impl_op_ex!(+ |a: &Speed, b: &u8| -> Speed { Speed::from_hm_per_hour(a.0 + b) });
+impl_op_ex!(+ |a: &Speed, b: &Speed| -> Speed { ops::Add::add(a, b.0) });
 
 impl<T> ops::Add<T> for &mut Speed
 where
@@ -164,11 +167,9 @@ where
 }
 
 impl_op_ex!(-|a: &Speed, b: &u8| -> Speed {
-    Speed {
-        inner: a.inner.saturating_sub(*b),
-    }
+    Speed (a.0.saturating_sub(*b))
 });
-impl_op_ex!(-|a: &Speed, b: &Speed| -> Speed { ops::Sub::sub(a, b.inner) });
+impl_op_ex!(-|a: &Speed, b: &Speed| -> Speed { ops::Sub::sub(a, b.0) });
 
 impl<T> ops::Sub<T> for &mut Speed
 where

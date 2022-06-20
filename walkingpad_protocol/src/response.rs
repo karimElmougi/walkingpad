@@ -1,7 +1,7 @@
 use super::*;
 
 use core::convert::TryInto;
-use core::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Display, Formatter};
 
 /// Defines the state the WalkingPad's motor can be in.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
@@ -52,7 +52,7 @@ pub struct State {
 }
 
 impl State {
-    fn deserialize(reader: &mut impl Iterator<Item = u8>) -> Result<State> {
+    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<State> {
         Ok(State {
             state: read_u8(reader)?.into(),
             speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
@@ -67,6 +67,23 @@ impl State {
                 read_u8(reader)?,
             ],
         })
+    }
+
+    pub fn distance(&self) -> measurements::Distance {
+        measurements::Distance::from_meters((self.distance * 10) as f64)
+    }
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "State {{ ")?;
+        write!(f, "state: {:?}, ", self.state)?;
+        write!(f, "speed: {}, ", self.speed)?;
+        write!(f, "mode: {:?}, ", self.mode)?;
+        write!(f, "current_time: {}, ", self.current_time)?;
+        write!(f, "distance: {}, ", self.distance())?;
+        write!(f, "nb_steps: {} ", self.nb_steps)?;
+        write!(f, "}}")
     }
 }
 
@@ -108,7 +125,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    fn deserialize(reader: &mut impl Iterator<Item = u8>) -> Result<Settings> {
+    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<Settings> {
         Ok(Settings {
             goal_type: read_u8(reader)?,
             goal: read_u32(reader)?,
@@ -130,6 +147,18 @@ impl Settings {
     }
 }
 
+impl Display for Settings {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Settings {{ ")?;
+        write!(f, "max_speed: {}, ", self.max_speed)?;
+        write!(f, "start_speed: {}, ", self.start_speed)?;
+        write!(f, "sensitivity: {:?}, ", self.sensitivity)?;
+        write!(f, "display: {:?}, ", self.display)?;
+        write!(f, "is_locked: {}, ", self.is_locked)?;
+        write!(f, "units: {:?} ", self.units)?;
+        write!(f, "}}")
+    }
+}
 /// Represents the records of statistics of past runs stored on the device.
 /// These records effectively form a linked list through the `next_id` field, with the id 255
 /// representing the latest record.
@@ -156,7 +185,7 @@ pub struct StoredStats {
 }
 
 impl StoredStats {
-    fn deserialize(reader: &mut impl Iterator<Item = u8>) -> Result<StoredStats> {
+    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<StoredStats> {
         Ok(StoredStats {
             current_time: read_u32(reader)?,
             start_time: read_u32(reader)?,
@@ -166,69 +195,44 @@ impl StoredStats {
             next_id: read_u8(reader).map(|n| if n == 0 { None } else { Some(n) })?,
         })
     }
-}
 
-#[cfg(feature = "std")]
-impl StoredStats {
-    pub fn start_time(&self) -> std::time::SystemTime {
-        let elapsed = (self.current_time - self.start_time) as u64;
-        let elapsed = std::time::Duration::from_secs(elapsed);
-        std::time::SystemTime::now() - elapsed
-    }
-
-    pub fn pretty_print(self, units: Units) -> PrettyPrintStoredStats {
-        PrettyPrintStoredStats {
-            units,
-            stored_stats: self,
-        }
-    }
-}
-
-impl StoredStats {
-    pub fn distance(&self, units: Units) -> measurements::Length {
-        match units {
-            Units::Metric => measurements::Length::from_decimeters(self.distance as f64),
-            Units::Imperial => measurements::Length::from_miles(self.distance as f64),
-        }
+    pub fn distance(&self) -> measurements::Distance {
+        measurements::Distance::from_meters((self.distance * 10) as f64)
     }
 
     pub fn duration(&self) -> core::time::Duration {
         core::time::Duration::from_secs(self.duration as u64)
     }
+
+    #[cfg(feature = "std")]
+    pub fn start_time(&self) -> std::time::SystemTime {
+        let elapsed = (self.current_time - self.start_time) as u64;
+        let elapsed = std::time::Duration::from_secs(elapsed);
+        std::time::SystemTime::now() - elapsed
+    }
 }
 
-#[cfg(feature = "std")]
-pub struct PrettyPrintStoredStats {
-    units: Units,
-    stored_stats: StoredStats,
-}
-
-#[cfg(feature = "std")]
-impl std::fmt::Display for PrettyPrintStoredStats {
+impl Display for StoredStats {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let start_time = time::OffsetDateTime::from(self.stored_stats.start_time())
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap();
+        write!(f, "StoredStats {{ ")?;
 
-        struct D(measurements::Length);
 
-        impl Debug for D {
-            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                if self.0.as_kilometers() < 1.0 {
-                    write!(f, "{}m", self.0.as_meters())
-                } else {
-                    write!(f, "{}km", self.0.as_kilometers())
-                }
-            }
+        #[cfg(feature = "std")]
+        {
+            let start_time = time::OffsetDateTime::from(self.start_time())
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap();
+            write!(f, "start_time: {}, ", start_time)?;
         }
 
-        f.debug_struct("StoredStats")
-            .field("start_time", &start_time)
-            .field("duration", &self.stored_stats.duration())
-            .field("distance", &D(self.stored_stats.distance(self.units)))
-            .field("nb_steps", &self.stored_stats.nb_steps)
-            .field("next_id", &self.stored_stats.next_id)
-            .finish()
+        #[cfg(not(feature = "std"))]
+        write!(f, "start_time: {}, ", self.start_time)?;
+
+        write!(f, "duration: {:?}, ", self.duration())?;
+        write!(f, "distance: {}, ", self.distance())?;
+        write!(f, "nb_steps: {:?}, ", self.nb_steps)?;
+        write!(f, "next_id: {:?}, ", self.next_id)?;
+        write!(f, "}}")
     }
 }
 
@@ -261,24 +265,34 @@ impl From<StoredStats> for Response {
 impl Debug for Response {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            Response::State(inner) => inner.fmt(f),
-            Response::Settings(inner) => inner.fmt(f),
+            Response::State(inner) => Debug::fmt(inner, f),
+            Response::Settings(inner) => Debug::fmt(inner, f),
             Response::StoredStats(inner) => Debug::fmt(inner, f),
         }
     }
 }
 
+impl Display for Response {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Response::State(inner) => Display::fmt(inner, f),
+            Response::Settings(inner) => Display::fmt(inner, f),
+            Response::StoredStats(inner) => Display::fmt(inner, f),
+        }
+    }
+}
+
 impl Response {
-    pub fn deserialize(bytes: &[u8]) -> Result<Response> {
+    pub fn parse(bytes: &[u8]) -> Result<Response> {
         let mut it = bytes.iter().copied();
 
         Response::parse_header(&mut it)?;
 
         let subject = read_u8(&mut it)?.try_into()?;
         let response = match subject {
-            Subject::State => State::deserialize(&mut it)?.into(),
-            Subject::Settings => Settings::deserialize(&mut it)?.into(),
-            Subject::StoredStats => StoredStats::deserialize(&mut it)?.into(),
+            Subject::State => State::parse(&mut it)?.into(),
+            Subject::Settings => Settings::parse(&mut it)?.into(),
+            Subject::StoredStats => StoredStats::parse(&mut it)?.into(),
         };
 
         let _crc = read_u8(&mut it)?;

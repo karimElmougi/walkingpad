@@ -138,7 +138,7 @@ pub fn connect() -> Result<(WalkingPadSender, WalkingPadReceiver)> {
 
         let receiver = async move {
             while let Some(data) = notification_stream.next().await {
-                match Response::deserialize(data.value.as_slice()) {
+                match Response::parse(data.value.as_slice()) {
                     Ok(response) => {
                         if receiver_in.send(response).is_err() {
                             break;
