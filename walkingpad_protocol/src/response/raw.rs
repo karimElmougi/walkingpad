@@ -3,11 +3,13 @@ use super::*;
 use core::convert::TryInto;
 use core::fmt::{Debug, Formatter};
 
+use measurements::Distance;
+
 /// Reprents the current state of the WalkingPad.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct State {
     /// The state of the motor.
-    pub state: MotorState,
+    pub motor_state: MotorState,
 
     /// The current speed.
     pub speed: Speed,
@@ -32,7 +34,7 @@ pub struct State {
 impl State {
     fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<State> {
         Ok(State {
-            state: read_u8(reader)?.into(),
+            motor_state: read_u8(reader)?.into(),
             speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
             mode: read_u8(reader)?.try_into()?,
             current_time: read_u32(reader)?,
@@ -47,8 +49,8 @@ impl State {
         })
     }
 
-    pub fn distance(&self) -> measurements::Distance {
-        measurements::Distance::from_meters((self.distance * 10) as f64)
+    pub fn distance(&self) -> Distance {
+        Distance::from_meters((self.distance * 10) as f64)
     }
 }
 
@@ -149,19 +151,12 @@ impl StoredStats {
         })
     }
 
-    pub fn distance(&self) -> measurements::Distance {
-        measurements::Distance::from_meters((self.distance * 10) as f64)
+    pub fn distance(&self) -> Distance {
+        Distance::from_meters((self.distance * 10) as f64)
     }
 
     pub fn duration(&self) -> core::time::Duration {
         core::time::Duration::from_secs(self.duration as u64)
-    }
-
-    #[cfg(feature = "std")]
-    pub fn start_time(&self) -> std::time::SystemTime {
-        let elapsed = (self.current_time - self.start_time) as u64;
-        let elapsed = std::time::Duration::from_secs(elapsed);
-        std::time::SystemTime::now() - elapsed
     }
 }
 

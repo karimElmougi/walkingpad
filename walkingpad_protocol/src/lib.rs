@@ -72,7 +72,7 @@ impl Speed {
     pub const fn from_km_per_hour(value: u8) -> Speed {
         match Speed::try_from_km_per_hour(value) {
             Ok(speed) => speed,
-            Err(_) => Speed (Speed::MAX / 10),
+            Err(_) => Speed(Speed::MAX / 10),
         }
     }
 
@@ -84,7 +84,7 @@ impl Speed {
     pub const fn from_hm_per_hour(value: u8) -> Speed {
         match Speed::try_from_hm_per_hour(value) {
             Ok(speed) => speed,
-            Err(_) => Speed(value),
+            Err(_) => Speed(Speed::MAX),
         }
     }
 
@@ -166,9 +166,7 @@ where
     }
 }
 
-impl_op_ex!(-|a: &Speed, b: &u8| -> Speed {
-    Speed (a.0.saturating_sub(*b))
-});
+impl_op_ex!(-|a: &Speed, b: &u8| -> Speed { Speed(a.0.saturating_sub(*b)) });
 impl_op_ex!(-|a: &Speed, b: &Speed| -> Speed { ops::Sub::sub(a, b.0) });
 
 impl<T> ops::Sub<T> for &mut Speed

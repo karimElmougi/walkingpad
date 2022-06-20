@@ -2,8 +2,9 @@ use super::*;
 
 pub mod raw;
 
-use core::convert::TryInto;
 use core::fmt::{Debug, Display, Formatter};
+
+use measurements::Distance;
 
 /// Defines the state the WalkingPad's motor can be in.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
@@ -31,7 +32,7 @@ impl From<u8> for MotorState {
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct State {
     /// The state of the motor.
-    pub state: MotorState,
+    pub motor_state: MotorState,
 
     /// The current speed.
     pub speed: Speed,
@@ -39,68 +40,40 @@ pub struct State {
     /// The current operational mode.
     pub mode: Mode,
 
-    /// The current time on the WalkingPad's internal clock.
-    pub current_time: u32,
-
     /// The distance currently traveled.
-    pub distance: u32,
+    pub distance: Distance,
 
     /// The number of steps counted so far.
     pub nb_steps: u32,
-
-    /// Bytes whose meaning is undetermined.
-    /// The third byte appears to correspond to button presses from the remote.
-    pub unknown: [u8; 4],
-}
-
-impl State {
-    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<State> {
-        Ok(State {
-            state: read_u8(reader)?.into(),
-            speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
-            mode: read_u8(reader)?.try_into()?,
-            current_time: read_u32(reader)?,
-            distance: read_u32(reader)?,
-            nb_steps: read_u32(reader)?,
-            unknown: [
-                read_u8(reader)?,
-                read_u8(reader)?,
-                read_u8(reader)?,
-                read_u8(reader)?,
-            ],
-        })
-    }
-
-    pub fn distance(&self) -> measurements::Distance {
-        measurements::Distance::from_meters((self.distance * 10) as f64)
-    }
 }
 
 impl Display for State {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "State {{ ")?;
-        write!(f, "state: {:?}, ", self.state)?;
+        write!(f, "motor_state: {:?}, ", self.motor_state)?;
         write!(f, "speed: {}, ", self.speed)?;
         write!(f, "mode: {:?}, ", self.mode)?;
-        write!(f, "current_time: {}, ", self.current_time)?;
-        write!(f, "distance: {}, ", self.distance())?;
+        write!(f, "distance: {}, ", self.distance)?;
         write!(f, "nb_steps: {} ", self.nb_steps)?;
         write!(f, "}}")
+    }
+}
+
+impl From<raw::State> for State {
+    fn from(raw: raw::State) -> State {
+        State {
+            motor_state: raw.motor_state,
+            speed: raw.speed,
+            mode: raw.mode,
+            distance: raw.distance(),
+            nb_steps: raw.nb_steps,
+        }
     }
 }
 
 /// Represents the settings stored on the WalkingPad.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Settings {
-    /// The significance of this field is unclear.
-    pub goal_type: u8, // TODO: What even is this?
-
-    /// The significance of this field is unclear.
-    pub goal: u32, // TODO: What even is this?
-
-    /// This field may represent whether the WalkingPad is in calibration mode.
-    pub calibration: u8, // TODO: is this a boolean, or something else?
-
     /// The maxmimum speed the WalkingPad can be set to.
     pub max_speed: Speed,
 
@@ -116,37 +89,8 @@ pub struct Settings {
     /// The currently displayed statistics on the WalkingPad's on-board display.
     pub display: InfoFlags,
 
-    /// Whether the WalkingPad's state is locked.
-    pub is_locked: bool, // TODO: Need to confirm what this actually does
-
     /// The units of measurement used on the WalkingPad's display.
     pub units: Units,
-
-    /// Bytes whose meaning is undetermined.
-    pub unknown: [u8; 4], // TODO: Figure out what those are
-}
-
-impl Settings {
-    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<Settings> {
-        Ok(Settings {
-            goal_type: read_u8(reader)?,
-            goal: read_u32(reader)?,
-            calibration: read_u8(reader)?,
-            max_speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
-            start_speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
-            start_mode: read_u8(reader)?.try_into()?,
-            sensitivity: read_u8(reader)?.try_into()?,
-            display: read_u8(reader)?.try_into()?,
-            is_locked: read_u8(reader)? != 0,
-            units: read_u8(reader)?.try_into()?,
-            unknown: [
-                read_u8(reader)?,
-                read_u8(reader)?,
-                read_u8(reader)?,
-                read_u8(reader)?,
-            ],
-        })
-    }
 }
 
 impl Display for Settings {
@@ -154,87 +98,76 @@ impl Display for Settings {
         write!(f, "Settings {{ ")?;
         write!(f, "max_speed: {}, ", self.max_speed)?;
         write!(f, "start_speed: {}, ", self.start_speed)?;
+        write!(f, "start_mode: {:?}, ", self.start_mode)?;
         write!(f, "sensitivity: {:?}, ", self.sensitivity)?;
         write!(f, "display: {:?}, ", self.display)?;
-        write!(f, "is_locked: {}, ", self.is_locked)?;
         write!(f, "units: {:?} ", self.units)?;
         write!(f, "}}")
     }
 }
-/// Represents the records of statistics of past runs stored on the device.
-/// These records effectively form a linked list through the `next_id` field, with the id 255
-/// representing the latest record.
+
+impl From<raw::Settings> for Settings {
+    fn from(raw: raw::Settings) -> Settings {
+        Settings {
+            max_speed: raw.max_speed,
+            start_speed: raw.start_speed,
+            start_mode: raw.start_mode,
+            sensitivity: raw.sensitivity,
+            display: raw.display,
+            units: raw.units,
+        }
+    }
+}
+
+#[cfg(not(feature = "std"))]
+pub use raw::StoredStats;
+
+/// Represents the statistics of a past run stored on the device.
+#[cfg(feature = "std")]
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct StoredStats {
-    /// The current time on the WalkingPad's internal clock.
-    /// It only tick while the belt is running and starts at 0 on first boot.
-    pub current_time: u32,
-
-    /// The start time of this run on the internal clock.
-    pub start_time: u32,
+    /// The start time of the run.
+    pub start_time: std::time::SystemTime,
 
     /// The duration of the run.
-    pub duration: u32,
+    pub duration: Duration,
 
     /// The distance traveled during the run, in decimeters (10 meters).
-    pub distance: u32,
+    pub distance: Distance,
 
     /// The number of steps recorded during the run.
     pub nb_steps: u32,
-
-    /// The id of the next record.
-    pub next_id: Option<u8>,
 }
 
-impl StoredStats {
-    fn parse(reader: &mut impl Iterator<Item = u8>) -> Result<StoredStats> {
-        Ok(StoredStats {
-            current_time: read_u32(reader)?,
-            start_time: read_u32(reader)?,
-            duration: read_u32(reader)?,
-            distance: read_u32(reader)?,
-            nb_steps: read_u32(reader)?,
-            next_id: read_u8(reader).map(|n| if n == 0 { None } else { Some(n) })?,
-        })
-    }
-
-    pub fn distance(&self) -> measurements::Distance {
-        measurements::Distance::from_meters((self.distance * 10) as f64)
-    }
-
-    pub fn duration(&self) -> core::time::Duration {
-        core::time::Duration::from_secs(self.duration as u64)
-    }
-
-    #[cfg(feature = "std")]
-    pub fn start_time(&self) -> std::time::SystemTime {
-        let elapsed = (self.current_time - self.start_time) as u64;
-        let elapsed = std::time::Duration::from_secs(elapsed);
-        std::time::SystemTime::now() - elapsed
-    }
-}
-
+#[cfg(feature = "std")]
 impl Display for StoredStats {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let start_time = time::OffsetDateTime::from(self.start_time())
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap();
+
         write!(f, "StoredStats {{ ")?;
-
-
-        #[cfg(feature = "std")]
-        {
-            let start_time = time::OffsetDateTime::from(self.start_time())
-                .format(&time::format_description::well_known::Rfc3339)
-                .unwrap();
-            write!(f, "start_time: {}, ", start_time)?;
-        }
-
-        #[cfg(not(feature = "std"))]
-        write!(f, "start_time: {}, ", self.start_time)?;
-
-        write!(f, "duration: {:?}, ", self.duration())?;
-        write!(f, "distance: {}, ", self.distance())?;
+        write!(f, "start_time: {}, ", start_time)?;
+        write!(f, "duration: {:?}, ", self.duration)?;
+        write!(f, "distance: {}, ", self.distance)?;
         write!(f, "nb_steps: {:?}, ", self.nb_steps)?;
-        write!(f, "next_id: {:?}, ", self.next_id)?;
         write!(f, "}}")
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<raw::StoredStats> for StoredStats {
+    fn from(raw: raw::StoredStats) -> StoredStats {
+        let elapsed = (raw.current_time - raw.start_time) as u64;
+        let elapsed = std::time::Duration::from_secs(elapsed);
+        let start_time = std::time::SystemTime::now() - elapsed;
+
+        StoredStats {
+            start_time,
+            duration: raw.duration(),
+            distance: raw.distance(),
+            nb_steps: raw.nb_steps,
+        }
     }
 }
 
@@ -247,20 +180,49 @@ pub enum Response {
 }
 
 impl From<State> for Response {
-    fn from(state: State) -> Self {
+    fn from(state: State) -> Response {
         Response::State(state)
     }
 }
 
 impl From<Settings> for Response {
-    fn from(settings: Settings) -> Self {
+    fn from(settings: Settings) -> Response {
         Response::Settings(settings)
     }
 }
 
 impl From<StoredStats> for Response {
-    fn from(stored_stats: StoredStats) -> Self {
+    fn from(stored_stats: StoredStats) -> Response {
         Response::StoredStats(stored_stats)
+    }
+}
+
+impl From<raw::State> for Response {
+    fn from(state: raw::State) -> Response {
+        Response::State(state.into())
+    }
+}
+
+impl From<raw::Settings> for Response {
+    fn from(settings: raw::Settings) -> Response {
+        Response::Settings(settings.into())
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<raw::StoredStats> for Response {
+    fn from(stored_stats: raw::StoredStats) -> Self {
+        Response::StoredStats(stored_stats.into())
+    }
+}
+
+impl From<raw::Response> for Response {
+    fn from(raw: raw::Response) -> Response {
+        match raw {
+            raw::Response::State(s) => s.into(),
+            raw::Response::Settings(s) => s.into(),
+            raw::Response::StoredStats(s) => s.into(),
+        }
     }
 }
 
@@ -279,63 +241,12 @@ impl Display for Response {
         match self {
             Response::State(inner) => Display::fmt(inner, f),
             Response::Settings(inner) => Display::fmt(inner, f),
+
+            #[cfg(feature = "std")]
             Response::StoredStats(inner) => Display::fmt(inner, f),
+
+            #[cfg(not(feature = "std"))]
+            Response::StoredStats(inner) => Debug::fmt(inner, f),
         }
     }
-}
-
-impl Response {
-    pub fn parse(bytes: &[u8]) -> Result<Response> {
-        let mut it = bytes.iter().copied();
-
-        Response::parse_header(&mut it)?;
-
-        let subject = read_u8(&mut it)?.try_into()?;
-        let response = match subject {
-            Subject::State => State::parse(&mut it)?.into(),
-            Subject::Settings => Settings::parse(&mut it)?.into(),
-            Subject::StoredStats => StoredStats::parse(&mut it)?.into(),
-        };
-
-        let _crc = read_u8(&mut it)?;
-
-        Response::parse_footer(&mut it)?;
-        if it.next().is_none() {
-            Ok(response)
-        } else {
-            Err(Error::BytesAfterFooter)
-        }
-    }
-
-    fn parse_header(reader: &mut impl Iterator<Item = u8>) -> Result<()> {
-        let byte = read_u8(reader)?;
-
-        const RESPONSE_HEADER: u8 = 0xf8;
-
-        (byte == RESPONSE_HEADER)
-            .then(|| ())
-            .ok_or(Error::InvalidResponseHeader(byte))
-    }
-
-    fn parse_footer(reader: &mut impl Iterator<Item = u8>) -> Result<()> {
-        let byte = read_u8(reader)?;
-
-        (byte == MESSAGE_FOOTER)
-            .then(|| ())
-            .ok_or(Error::InvalidResponseFooter(byte))
-    }
-}
-
-fn read_u32(reader: &mut impl Iterator<Item = u8>) -> Result<u32> {
-    // Because the Wakling Pad uses 3-bytes long integer counters in respones
-    Ok(u32::from_be_bytes([
-        0,
-        read_u8(reader)?,
-        read_u8(reader)?,
-        read_u8(reader)?,
-    ]))
-}
-
-fn read_u8(reader: &mut impl Iterator<Item = u8>) -> Result<u8> {
-    reader.next().ok_or(Error::ResponseTooShort)
 }
