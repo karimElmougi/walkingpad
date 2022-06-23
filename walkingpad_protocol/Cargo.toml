@@ -4,13 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-serde = ["dep:serde", "dep:parse_duration", "dep:arrayvec"]
+serde = ["dep:serde", "dep:humantime", "dep:humantime-serde"]
 
 [dependencies]
 bitflags = "^1.3"
-strum = "0.24"
+strum = { version = "0.24", default-features = false, features = [] }
 strum_macros = "0.24"
-impl_ops = "0.1"
 serde = {version = "1", default-features = false, features = ["derive"], optional = true }
-parse_duration = { version = "2", optional = true }
-arrayvec = { version = "0.7", optional = true }
+humantime = { version = "2", optional = true }
+humantime-serde = { version = "1", optional = true }

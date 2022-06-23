@@ -21,9 +21,6 @@ use core::ops;
 use bitflags::bitflags;
 use strum_macros::FromRepr;
 
-#[macro_use]
-extern crate impl_ops;
-
 const MESSAGE_FOOTER: u8 = 0xfd;
 
 type Result<T> = core::result::Result<T, Error>;
@@ -117,8 +114,33 @@ impl Display for Speed {
     }
 }
 
-impl_op_ex!(+ |a: &Speed, b: &u8| -> Speed { Speed::from_hm_per_hour(a.0 + b) });
-impl_op_ex!(+ |a: &Speed, b: &Speed| -> Speed { ops::Add::add(a, b.0) });
+impl From<u8> for Speed {
+    fn from(n: u8) -> Speed {
+        Speed::from_hm_per_hour(n)
+    }
+}
+
+impl<T> ops::Add<T> for Speed
+where
+    T: Into<Speed>,
+{
+    type Output = Speed;
+
+    fn add(self, rhs: T) -> Self::Output {
+        Speed::from_hm_per_hour(self.0 + rhs.into().0)
+    }
+}
+
+impl<T> ops::Add<T> for &'_ Speed
+where
+    Speed: ops::Add<T>,
+{
+    type Output = <Speed as ops::Add<T>>::Output;
+
+    fn add(self, rhs: T) -> Self::Output {
+        ops::Add::<T>::add(*self, rhs)
+    }
+}
 
 impl<T> ops::Add<T> for &mut Speed
 where
@@ -127,31 +149,7 @@ where
     type Output = <Speed as ops::Add<T>>::Output;
 
     fn add(self, rhs: T) -> Self::Output {
-        ops::Add::add(*self, rhs)
-    }
-}
-
-impl<T> ops::Add<&mut T> for &'_ Speed
-where
-    T: Copy,
-    Speed: ops::Add<T>,
-{
-    type Output = <Speed as ops::Add<T>>::Output;
-
-    fn add(self, rhs: &mut T) -> Self::Output {
-        ops::Add::add(*self, *rhs)
-    }
-}
-
-impl<T> ops::Add<&mut T> for Speed
-where
-    T: Copy,
-    Self: ops::Add<T>,
-{
-    type Output = <Speed as ops::Add<T>>::Output;
-
-    fn add(self, rhs: &mut T) -> Self::Output {
-        ops::Add::add(self, *rhs)
+        ops::Add::<T>::add(*self, rhs)
     }
 }
 
@@ -164,41 +162,14 @@ where
     }
 }
 
-impl_op_ex!(-|a: &Speed, b: &u8| -> Speed { Speed(a.0.saturating_sub(*b)) });
-impl_op_ex!(-|a: &Speed, b: &Speed| -> Speed { ops::Sub::sub(a, b.0) });
-
-impl<T> ops::Sub<T> for &mut Speed
+impl<T> ops::Sub<T> for Speed
 where
-    Speed: ops::Sub<T>,
+    T: Into<Speed>,
 {
-    type Output = <Speed as ops::Sub<T>>::Output;
+    type Output = Speed;
 
     fn sub(self, rhs: T) -> Self::Output {
-        ops::Sub::sub(*self, rhs)
-    }
-}
-
-impl<T> ops::Sub<&mut T> for &'_ Speed
-where
-    T: Copy,
-    Speed: ops::Sub<T>,
-{
-    type Output = <Speed as ops::Sub<T>>::Output;
-
-    fn sub(self, rhs: &mut T) -> Self::Output {
-        ops::Sub::sub(*self, *rhs)
-    }
-}
-
-impl<T> ops::Sub<&mut T> for Speed
-where
-    T: Copy,
-    Self: ops::Sub<T>,
-{
-    type Output = <Speed as ops::Sub<T>>::Output;
-
-    fn sub(self, rhs: &mut T) -> Self::Output {
-        ops::Sub::sub(self, *rhs)
+        Speed::from_hm_per_hour(self.0.saturating_sub(rhs.into().0))
     }
 }
 
@@ -326,30 +297,13 @@ mod test {
     fn test() {
         let mut a = Speed::from_hm_per_hour(10);
         let mut b = Speed::from_hm_per_hour(55);
+
         assert_eq!(0, (a - b).hm_per_hour());
         assert_eq!(45, (b - a).hm_per_hour());
         assert_eq!(60, (b + a).hm_per_hour());
         assert_eq!(60, (a + b).hm_per_hour());
-
-        assert_eq!(60, (&mut a + &mut b).hm_per_hour());
-        assert_eq!(60, (&mut a + &b).hm_per_hour());
-        assert_eq!(60, (&a + &mut b).hm_per_hour());
-        assert_eq!(60, (&a + &b).hm_per_hour());
-        assert_eq!(60, (&a + b).hm_per_hour());
-        assert_eq!(60, (a + &b).hm_per_hour());
         assert_eq!(60, (a + b).hm_per_hour());
-        assert_eq!(60, (&mut a + b).hm_per_hour());
-        assert_eq!(60, (a + &mut b).hm_per_hour());
-
-        assert_eq!(0, (&mut a - &mut b).hm_per_hour());
-        assert_eq!(0, (&mut a - &b).hm_per_hour());
-        assert_eq!(0, (&a - &mut b).hm_per_hour());
-        assert_eq!(0, (&a - &b).hm_per_hour());
-        assert_eq!(0, (&a - b).hm_per_hour());
-        assert_eq!(0, (a - &b).hm_per_hour());
         assert_eq!(0, (a - b).hm_per_hour());
-        assert_eq!(0, (&mut a - b).hm_per_hour());
-        assert_eq!(0, (a - &mut b).hm_per_hour());
 
         a += 5;
         assert_eq!(15, a.hm_per_hour());

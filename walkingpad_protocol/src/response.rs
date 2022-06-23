@@ -40,7 +40,8 @@ pub struct State {
     pub mode: Mode,
 
     /// Time in seconds of the current run on the WalkingPad's internal clock.
-    pub run_time: u32,
+    #[cfg_attr(feature = "serde", serde(with = "humantime_serde"))]
+    pub run_time: Duration,
 
     /// The distance traveled during the current run, in decameters (10m).
     pub distance: u32,
@@ -60,7 +61,7 @@ impl State {
             motor_state: read_u8(reader)?.into(),
             speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
             mode: read_u8(reader)?.try_into()?,
-            run_time: read_u32(reader)?,
+            run_time: Duration::from_secs(read_u32(reader)?.into()),
             distance: read_u32(reader)?,
             nb_steps: read_u32(reader)?,
             unknown: [
@@ -84,7 +85,7 @@ impl Display for State {
         write!(f, "speed: {}, ", self.speed)?;
         write!(f, "mode: {:?}, ", self.mode)?;
         write!(f, "distance: {}m, ", self.distance_as_meters())?;
-        write!(f, "run_time: {}, ", self.run_time)?;
+        write!(f, "run_time: {:?}, ", self.run_time)?;
         write!(f, "nb_steps: {} ", self.nb_steps)?;
         write!(f, "}}")
     }
@@ -185,7 +186,7 @@ pub struct StoredStats {
     pub start_time: u32,
 
     /// The duration of the run.
-    #[cfg_attr(feature = "serde", serde(with = "serde_duration"))]
+    #[cfg_attr(feature = "serde", serde(with = "humantime_serde"))]
     pub duration: Duration,
 
     /// The distance traveled during the run, in decameters (10m).
@@ -327,48 +328,4 @@ fn read_u32(reader: &mut impl Iterator<Item = u8>) -> Result<u32> {
 
 fn read_u8(reader: &mut impl Iterator<Item = u8>) -> Result<u8> {
     reader.next().ok_or(Error::ResponseTooShort)
-}
-
-#[cfg(feature = "serde")]
-mod serde_duration {
-    use arrayvec::ArrayString;
-    use serde::{de, ser};
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    use core::fmt::Write;
-    use core::time::Duration;
-
-    pub fn serialize<S>(dur: &Duration, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use ser::Error;
-
-        const MINUTE: Duration = Duration::from_secs(60);
-        const HOUR: Duration = Duration::from_secs(60 * 60);
-
-        let mut buffer = ArrayString::<64>::new();
-        if *dur > HOUR {
-            let hours = dur.as_secs() / HOUR.as_secs();
-            let minutes = (dur.as_secs() % HOUR.as_secs()) / 60;
-
-            core::write!(buffer, "{}h{}m", hours, minutes).map_err(S::Error::custom)?;
-        } else if *dur > MINUTE {
-            core::write!(buffer, "{}m", dur.as_secs() / 60).map_err(S::Error::custom)?;
-        } else {
-            core::write!(buffer, "{}s", dur.as_secs()).map_err(S::Error::custom)?;
-        }
-
-        serializer.serialize_str(buffer.as_str())
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use de::Error;
-
-        let dur: &str = Deserialize::deserialize(deserializer)?;
-        parse_duration::parse(dur).map_err(D::Error::custom)
-    }
 }
