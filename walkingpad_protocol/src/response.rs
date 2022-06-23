@@ -43,7 +43,7 @@ pub struct State {
     #[cfg_attr(feature = "serde", serde(with = "humantime_serde"))]
     pub run_time: Duration,
 
-    /// The distance traveled during the current run, in decameters (10m).
+    /// The distance traveled during the current run, in meters.
     pub distance: u32,
 
     /// The number of steps counted so far.
@@ -62,7 +62,7 @@ impl State {
             speed: read_u8(reader).and_then(Speed::try_from_hm_per_hour)?,
             mode: read_u8(reader)?.try_into()?,
             run_time: Duration::from_secs(read_u32(reader)?.into()),
-            distance: read_u32(reader)?,
+            distance: decameter_to_meter(read_u32(reader)?),
             nb_steps: read_u32(reader)?,
             unknown: [
                 read_u8(reader)?,
@@ -72,10 +72,6 @@ impl State {
             ],
         })
     }
-
-    pub fn distance_as_meters(&self) -> u32 {
-        self.distance * 10
-    }
 }
 
 impl Display for State {
@@ -84,7 +80,7 @@ impl Display for State {
         write!(f, "motor_state: {:?}, ", self.motor_state)?;
         write!(f, "speed: {}, ", self.speed)?;
         write!(f, "mode: {:?}, ", self.mode)?;
-        write!(f, "distance: {}m, ", self.distance_as_meters())?;
+        write!(f, "distance: {}m, ", self.distance)?;
         write!(f, "run_time: {:?}, ", self.run_time)?;
         write!(f, "nb_steps: {} ", self.nb_steps)?;
         write!(f, "}}")
@@ -189,7 +185,7 @@ pub struct StoredStats {
     #[cfg_attr(feature = "serde", serde(with = "humantime_serde"))]
     pub duration: Duration,
 
-    /// The distance traveled during the run, in decameters (10m).
+    /// The distance traveled during the run, in meters.
     pub distance: u32,
 
     /// The number of steps recorded during the run.
@@ -206,14 +202,10 @@ impl StoredStats {
             current_time: read_u32(reader)?,
             start_time: read_u32(reader)?,
             duration: Duration::from_secs(read_u32(reader)?.into()),
-            distance: read_u32(reader)?,
+            distance: decameter_to_meter(read_u32(reader)?),
             nb_steps: read_u32(reader)?,
             next_id: read_u8(reader).map(|n| if n == 0 { None } else { Some(n) })?,
         })
-    }
-
-    pub fn distance_as_meters(&self) -> u32 {
-        self.distance * 10
     }
 }
 
@@ -222,7 +214,7 @@ impl Display for StoredStats {
         write!(f, "StoredStats {{ ")?;
         write!(f, "start_time: {}, ", self.start_time)?;
         write!(f, "duration: {:?}, ", self.duration)?;
-        write!(f, "distance: {}m, ", self.distance_as_meters())?;
+        write!(f, "distance: {}m, ", self.distance)?;
         write!(f, "nb_steps: {:?}, ", self.nb_steps)?;
         write!(f, "}}")
     }
@@ -328,4 +320,8 @@ fn read_u32(reader: &mut impl Iterator<Item = u8>) -> Result<u32> {
 
 fn read_u8(reader: &mut impl Iterator<Item = u8>) -> Result<u8> {
     reader.next().ok_or(Error::ResponseTooShort)
+}
+
+fn decameter_to_meter(n: u32) -> u32 {
+    n * 10
 }
