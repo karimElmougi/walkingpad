@@ -4,9 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-walkingpad_protocol = { path = "../walkingpad_protocol" }
-walkingpad_btle = { path = "../walkingpad_btle" }
-simplelog = "0.11"
+chrono = { version = "0.4", features = ["serde"] }
+humantime = "2"
+humantime-serde = "1"
 log = "0.4"
 serde_json = "1"
 serde = {version = "1", default-features = false, features = ["derive"] }
+simplelog = "0.11"
+walkingpad_protocol = { path = "../walkingpad_protocol" }
+walkingpad_btle = { path = "../walkingpad_btle" }
