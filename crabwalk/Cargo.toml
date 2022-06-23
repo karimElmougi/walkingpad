@@ -5,3 +5,8 @@ edition = "2021"
 
 [dependencies]
 walkingpad_protocol = { path = "../walkingpad_protocol" }
+walkingpad_btle = { path = "../walkingpad_btle" }
+simplelog = "0.11"
+log = "0.4"
+serde_json = "1"
+serde = {version = "1", default-features = false, features = ["derive"] }
