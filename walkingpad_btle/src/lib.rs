@@ -26,6 +26,7 @@ pub enum Error {
     ConnectionError(String),
     ConnectionClosed,
     ConnectionAlreadyEstablished,
+    NoWalkingPadFound,
     NoAdapters,
 }
 
@@ -37,6 +38,7 @@ impl Display for Error {
             ConnectionError(inner) => write!(f, "Error connecting to the WalkingPad: {}", inner),
             ConnectionClosed => write!(f, "Connection was closed"),
             ConnectionAlreadyEstablished => write!(f, "Connection was already established"),
+            NoWalkingPadFound => write!(f, "No WalkingPad found"),
             NoAdapters => write!(f, "No bluetooth adapters found"),
         }
     }
@@ -258,6 +260,7 @@ async fn discover_walkingpad(adapter: &Adapter) -> Result<Peripheral> {
     };
     adapter.start_scan(filter).await?;
 
+    // TODO: Is this necessary?
     tokio::time::sleep(Duration::from_millis(250)).await;
 
     let peripherals = match adapter.peripherals().await {
@@ -285,5 +288,5 @@ async fn discover_walkingpad(adapter: &Adapter) -> Result<Peripheral> {
         };
     }
 
-    Err(Error::ConnectionError("No WalkingPad found".to_string()))
+    Err(Error::NoWalkingPadFound)
 }
