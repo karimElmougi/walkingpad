@@ -11,10 +11,12 @@
     let set_speed = request::set::speed(Speed::from_hm_per_hour(25));
 */
 
+use either::Either;
+
 use core::fmt::Debug;
 use core::mem::size_of;
 
-use super::*;
+use super::{InfoFlags, Mode, Sensitivity, Speed, Subject, Units, MESSAGE_FOOTER};
 
 /// Clears all data associated with past runs stored on the WalkingPad.
 pub fn clear_stats() -> Request {
@@ -97,14 +99,15 @@ pub mod set {
     }
 }
 
-const REQUEST_HEADER: u8 = 0xf7;
+const U8_PARAM_SIZE: usize = core::mem::size_of::<u8>();
+const U32_PARAM_SIZE: usize = core::mem::size_of::<u32>();
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct Request(RequestVariant);
+pub struct Request(Either<RawRequest<U8_PARAM_SIZE>, RawRequest<U32_PARAM_SIZE>>);
 
 impl Request {
     const fn from_u8(request_type: u8, subject: Subject, param: u8) -> Request {
-        Request(RequestVariant::U8(RawRequest::new(
+        Request(Either::Left(RawRequest::new(
             request_type,
             subject,
             [param],
@@ -113,59 +116,40 @@ impl Request {
 
     const fn from_u32(request_type: u8, subject: Subject, param: u32) -> Request {
         let param = param.to_be_bytes();
-        Request(RequestVariant::U32(RawRequest::new(
-            request_type,
-            subject,
-            param,
-        )))
+        Request(Either::Right(RawRequest::new(request_type, subject, param)))
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        match &self.0 {
-            RequestVariant::U8(req) => req.as_bytes(),
-            RequestVariant::U32(req) => req.as_bytes(),
-        }
+        self.0
+            .as_ref()
+            .either(RawRequest::as_bytes, RawRequest::as_bytes)
     }
 }
 
 impl Debug for Request {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let param = match &self.0 {
+            Either::Left(req_u8) => req_u8.param[0] as u32,
+            Either::Right(req_u32) => u32::from_be_bytes(req_u32.param),
+        };
+        // The constructors all take a Subject variant, fine to unwrap
+        let subject = match &self.0 {
+            Either::Left(req_u8) => Subject::try_from(req_u8.subject).unwrap(),
+            Either::Right(req_u32) => Subject::try_from(req_u32.subject).unwrap(),
+        };
+        let request_type = self
+            .0
+            .as_ref()
+            .either(|r| r.request_type, |r| r.request_type);
         f.debug_struct("Request")
-            .field("subject", &self.0.subject())
-            .field("request_type", &self.0.request_type())
-            .field("param", &self.0.param())
+            .field("subject", &subject)
+            .field("request_type", &request_type)
+            .field("param", &param)
             .finish()
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-enum RequestVariant {
-    U8(RawRequest<1>),
-    U32(RawRequest<4>),
-}
-
-impl RequestVariant {
-    fn subject(&self) -> Subject {
-        match self {
-            RequestVariant::U8(r) => r.subject.try_into().unwrap(),
-            RequestVariant::U32(r) => r.subject.try_into().unwrap(),
-        }
-    }
-
-    fn request_type(&self) -> u8 {
-        match self {
-            RequestVariant::U8(r) => r.request_type,
-            RequestVariant::U32(r) => r.request_type,
-        }
-    }
-
-    fn param(&self) -> u32 {
-        match self {
-            RequestVariant::U8(r) => r.param[0] as u32,
-            RequestVariant::U32(r) => u32::from_be_bytes(r.param),
-        }
-    }
-}
+const REQUEST_HEADER: u8 = 0xf7;
 
 #[repr(C)]
 #[derive(Clone, PartialEq, Eq)]

@@ -8,6 +8,7 @@ serde = ["dep:serde", "dep:humantime", "dep:humantime-serde"]
 
 [dependencies]
 bitflags = { version = "2", features = ["serde"] }
+either = "1"
 strum = { version = "0.26", default-features = false, features = [] }
 strum_macros = "0.26"
 serde = {version = "1", default-features = false, features = ["derive"], optional = true }
