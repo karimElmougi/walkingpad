@@ -1,7 +1,7 @@
-use super::*;
-
 use core::fmt::{Debug, Display, Formatter};
 use core::time::Duration;
+
+use super::{Error, InfoFlags, Mode, Result, Sensitivity, Speed, Subject, Units, MESSAGE_FOOTER};
 
 /// Defines the state the WalkingPad's motor can be in.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
@@ -75,7 +75,7 @@ impl State {
 }
 
 impl Display for State {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "State {{ ")?;
         write!(f, "motor_state: {:?}, ", self.motor_state)?;
         write!(f, "speed: {}, ", self.speed)?;
@@ -154,7 +154,7 @@ impl Settings {
 }
 
 impl Display for Settings {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "Settings {{ ")?;
         write!(f, "max_speed: {}, ", self.max_speed)?;
         write!(f, "start_speed: {}, ", self.start_speed)?;
@@ -210,7 +210,7 @@ impl StoredStats {
 }
 
 impl Display for StoredStats {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "StoredStats {{ ")?;
         write!(f, "start_time: {}, ", self.start_time)?;
         write!(f, "duration: {:?}, ", self.duration)?;
@@ -295,7 +295,7 @@ impl Response {
         const RESPONSE_HEADER: u8 = 0xf8;
 
         (byte == RESPONSE_HEADER)
-            .then(|| ())
+            .then_some(())
             .ok_or(Error::InvalidResponseHeader(byte))
     }
 
@@ -303,7 +303,7 @@ impl Response {
         let byte = read_u8(reader)?;
 
         (byte == MESSAGE_FOOTER)
-            .then(|| ())
+            .then_some(())
             .ok_or(Error::InvalidResponseFooter(byte))
     }
 }

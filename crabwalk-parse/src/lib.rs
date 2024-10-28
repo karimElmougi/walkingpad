@@ -23,7 +23,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 pub fn parse(input: &str) -> Result<Request> {
-    let mut tokens = input.trim().split_whitespace();
+    let mut tokens = input.split_whitespace();
 
     match tokens.next() {
         Some("get") => get(&mut tokens),

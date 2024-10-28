@@ -56,7 +56,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut stats_file = File::options()
         .create(true)
-        .write(true)
         .append(true)
         .open("stats.json")?;
 
