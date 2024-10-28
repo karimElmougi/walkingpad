@@ -16,6 +16,87 @@ use core::mem::size_of;
 
 use super::*;
 
+/// Clears all data associated with past runs stored on the WalkingPad.
+pub fn clear_stats() -> Request {
+    Request::from_u8(0xaa, Subject::StoredStats, 0u8)
+}
+
+pub fn start() -> Request {
+    Request::from_u8(4, Subject::State, true as u8)
+}
+
+pub fn stop() -> Request {
+    Request::from_u8(4, Subject::State, false as u8)
+}
+
+pub mod get {
+    use super::*;
+
+    pub const fn state() -> Request {
+        Request::from_u8(0, Subject::State, 0u8)
+    }
+
+    /// Request for the WalkingPad's current settings.
+    pub const fn settings() -> Request {
+        Request::from_u32(0, Subject::Settings, 0u32)
+    }
+
+    /// Request for retrieving the stored run stats associated with the most recent run.
+    pub const fn latest_stored_stats() -> Request {
+        const LATEST_STATS: u8 = 255;
+        Request::from_u8(0xaa, Subject::StoredStats, LATEST_STATS)
+    }
+
+    /// Request for retrieving the stored run stats associated with a specific ID.
+    pub const fn stored_stats(id: u8) -> Request {
+        Request::from_u8(0xaa, Subject::StoredStats, id)
+    }
+}
+
+pub mod set {
+    use super::*;
+
+    pub const fn speed(speed: Speed) -> Request {
+        Request::from_u8(1, Subject::State, speed.hm_per_hour())
+    }
+
+    pub const fn mode(mode: Mode) -> Request {
+        Request::from_u8(2, Subject::State, mode as u8)
+    }
+
+    pub const fn calibration_mode(enabled: bool) -> Request {
+        Request::from_u32(2, Subject::Settings, enabled as u32)
+    }
+
+    pub const fn max_speed(speed: Speed) -> Request {
+        Request::from_u32(3, Subject::Settings, speed.hm_per_hour() as u32)
+    }
+
+    pub const fn start_speed(speed: Speed) -> Request {
+        Request::from_u32(4, Subject::Settings, speed.hm_per_hour() as u32)
+    }
+
+    pub const fn auto_start(enabled: bool) -> Request {
+        Request::from_u32(5, Subject::Settings, enabled as u32)
+    }
+
+    pub const fn sensitivity(sensitivity: Sensitivity) -> Request {
+        Request::from_u32(6, Subject::Settings, sensitivity as u32)
+    }
+
+    pub const fn display(flags: InfoFlags) -> Request {
+        Request::from_u32(7, Subject::Settings, flags.bits() as u32)
+    }
+
+    pub const fn units(units: Units) -> Request {
+        Request::from_u32(8, Subject::Settings, units as u32)
+    }
+
+    pub const fn locked(is_locked: bool) -> Request {
+        Request::from_u32(9, Subject::Settings, is_locked as u32)
+    }
+}
+
 const REQUEST_HEADER: u8 = 0xf7;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -130,87 +211,6 @@ impl<const N: usize> RawRequest<N> {
     fn as_bytes(&self) -> &[u8] {
         let ptr = self as *const RawRequest<N> as *const u8;
         unsafe { core::slice::from_raw_parts(ptr, size_of::<Self>()) }
-    }
-}
-
-/// Clears all data associated with past runs stored on the WalkingPad.
-pub fn clear_stats() -> Request {
-    Request::from_u8(0xaa, Subject::StoredStats, 0u8)
-}
-
-pub fn start() -> Request {
-    Request::from_u8(4, Subject::State, true as u8)
-}
-
-pub fn stop() -> Request {
-    Request::from_u8(4, Subject::State, false as u8)
-}
-
-pub mod get {
-    use super::*;
-
-    pub const fn state() -> Request {
-        Request::from_u8(0, Subject::State, 0u8)
-    }
-
-    /// Request for the WalkingPad's current settings.
-    pub const fn settings() -> Request {
-        Request::from_u32(0, Subject::Settings, 0u32)
-    }
-
-    /// Request for retrieving the stored run stats associated with the most recent run.
-    pub const fn latest_stored_stats() -> Request {
-        const LATEST_STATS: u8 = 255;
-        Request::from_u8(0xaa, Subject::StoredStats, LATEST_STATS)
-    }
-
-    /// Request for retrieving the stored run stats associated with a specific ID.
-    pub const fn stored_stats(id: u8) -> Request {
-        Request::from_u8(0xaa, Subject::StoredStats, id)
-    }
-}
-
-pub mod set {
-    use super::*;
-
-    pub const fn speed(speed: Speed) -> Request {
-        Request::from_u8(1, Subject::State, speed.hm_per_hour())
-    }
-
-    pub const fn mode(mode: Mode) -> Request {
-        Request::from_u8(2, Subject::State, mode as u8)
-    }
-
-    pub const fn calibration_mode(enabled: bool) -> Request {
-        Request::from_u32(2, Subject::Settings, enabled as u32)
-    }
-
-    pub const fn max_speed(speed: Speed) -> Request {
-        Request::from_u32(3, Subject::Settings, speed.hm_per_hour() as u32)
-    }
-
-    pub const fn start_speed(speed: Speed) -> Request {
-        Request::from_u32(4, Subject::Settings, speed.hm_per_hour() as u32)
-    }
-
-    pub const fn auto_start(enabled: bool) -> Request {
-        Request::from_u32(5, Subject::Settings, enabled as u32)
-    }
-
-    pub const fn sensitivity(sensitivity: Sensitivity) -> Request {
-        Request::from_u32(6, Subject::Settings, sensitivity as u32)
-    }
-
-    pub const fn display(flags: InfoFlags) -> Request {
-        Request::from_u32(7, Subject::Settings, flags.bits() as u32)
-    }
-
-    pub const fn units(units: Units) -> Request {
-        Request::from_u32(8, Subject::Settings, units as u32)
-    }
-
-    pub const fn locked(is_locked: bool) -> Request {
-        Request::from_u32(9, Subject::Settings, is_locked as u32)
     }
 }
 

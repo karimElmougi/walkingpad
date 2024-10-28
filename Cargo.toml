@@ -1,5 +1,7 @@
 [workspace]
 
+resolver = "2"
+
 members = [
   "walkingpad_protocol",
   "walkingpad_btle",

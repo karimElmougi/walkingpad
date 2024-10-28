@@ -271,6 +271,7 @@ bitflags! {
     /// let request = request::set::display(InfoFlags::TIME | InfoFlags::SPEED);
     /// ```
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
     pub struct InfoFlags: u8 {
         const NONE = 0b0;
         const TIME = 0b1;
